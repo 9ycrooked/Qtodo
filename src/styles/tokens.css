@@ -1,0 +1,84 @@
+/* ============================================================
+   tokens.css — 自定义主题（覆盖 Beercss 默认紫色 → 蓝色）
+   ============================================================ */
+
+/* Layer 1: Primitive —— 调色盘（暂时只放蓝、绿、紫、橙 4 套） */
+:root {
+  /* 蓝色调色盘（MD3 标准 Source 蓝） */
+  --md-prim-blue-10:  #000a3c;
+  --md-prim-blue-20:  #001454;
+  --md-prim-blue-30:  #001e6f;
+  --md-prim-blue-40:  #002a87;  /* 亮色模式主蓝 */
+  --md-prim-blue-50:  #00349f;
+  --md-prim-blue-60:  #1a3fb7;
+  --md-prim-blue-70:  #2e4ecf;
+  --md-prim-blue-80:  #435fe6;  /* 暗色模式主蓝 */
+  --md-prim-blue-90:  #5b75ff;
+  --md-prim-blue-95:  #bcc7ff;
+
+  /* 中性色（灰） */
+  --md-prim-neutral-10:  #1c1b1e;  /* 暗色背景 */
+  --md-prim-neutral-20:  #313033;
+  --md-prim-neutral-90:  #e6e1e6;  /* 暗色文字 */
+  --md-prim-neutral-95:  #f4eff4;
+  --md-prim-neutral-99:  #fdf8fd;  /* 亮色背景 */
+  --md-prim-neutral-100: #ffffff;
+}
+
+/* Layer 2: Semantic —— 覆盖 Beercss 用的 MD3 标准变量（亮色） */
+:root,
+body.light {
+  /* 主色（亮色模式用深蓝） */
+  --primary:               var(--md-prim-blue-40);
+  --on-primary:            var(--md-prim-neutral-100);
+  --primary-container:     var(--md-prim-blue-90);
+  --on-primary-container:  var(--md-prim-blue-10);
+
+  /* 背景/表面 */
+  --background:            var(--md-prim-neutral-100);
+  --on-background:         var(--md-prim-neutral-10);
+  --surface:               var(--md-prim-neutral-99);
+  --on-surface:            var(--md-prim-neutral-10);
+  --surface-variant:       #e7e0eb;
+  --on-surface-variant:    #49454e;
+
+  /* 容器色 */
+  --surface-container-lowest: var(--md-prim-neutral-100);
+  --surface-container-low:    var(--md-prim-neutral-99);
+  --surface-container:        #f2ecf1;
+  --surface-container-high:   #ece7eb;
+  --surface-container-highest: #e6e1e6;
+
+  /* 错误色（MD3 标准 Source 红） */
+  --error: #ba1a1a;
+  --on-error: #ffffff;
+  --error-container: #edccc9;
+  --on-error-container: #410002;
+}
+
+/* Layer 2b: Semantic —— 暗色模式 */
+body.dark {
+  --primary:               var(--md-prim-blue-80);
+  --on-primary:            var(--md-prim-blue-10);
+  --primary-container:     var(--md-prim-blue-30);
+  --on-primary-container:  var(--md-prim-blue-90);
+
+  --background:            #1c1b1e;
+  --on-background:         #e6e1e6;
+  --surface:               #141316;
+  --on-surface:            #e6e1e6;
+  --surface-variant:       #49454e;
+  --on-surface-variant:    #cac4cf;
+
+  --surface-container-lowest: #0f0e11;
+  --surface-container-low:    #1c1b1e;
+  --surface-container:        #201f22;
+  --surface-container-high:   #2b292d;
+  --surface-container-highest: #363438;
+
+    /* 错误色（MD3 标准 Source 红） */
+    --error: #ffb4ab;
+    --on-error: #690005;
+    --error-container: #e0968e;
+    --on-error-container: #410002;
+}
