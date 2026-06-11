@@ -100,9 +100,9 @@ const startDragging = async (event: MouseEvent) => {
 
 <style scoped>
 .titlebar {
-    height: 40px;
-    min-height: 40px;
-    max-height: 40px;
+    height: 32px;
+    min-height: 32px;
+    max-height: 32px;
     box-sizing: border-box;
 
     display: flex;
@@ -111,14 +111,23 @@ const startDragging = async (event: MouseEvent) => {
     padding-inline: 8px;
 
     user-select: none;
-    background: var(--surface);
+    background: var(--title-bar-background);
     color: var(--on-surface);
-    border-bottom: 1px solid var(--outline-variant);
+    /* border-bottom: 1px solid var(--outline-variant); */
 }
 
 .titlebar i {
-    font-size: 20px;
+    font-size: 24px;
     line-height: 1;
+}
+
+.titlebar h7 {
+    font-size: 18px;
+    margin: 0;
+    line-height: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .titlebar-left {
@@ -151,19 +160,11 @@ const startDragging = async (event: MouseEvent) => {
     flex-shrink: 0;
 }
 
-.titlebar h7 {
-    margin: 0;
-    line-height: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-}
-
 .titlebar button {
-    width: 32px;
-    height: 32px;
-    min-width: 32px;
-    min-height: 32px;
+    width: 28px;
+    height: 28px;
+    min-width: 28px;
+    min-height: 28px;
     padding: 0;
     margin: 0;
     -webkit-app-region: no-drag;
