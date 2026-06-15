@@ -40,7 +40,7 @@ function onClick(event: MouseEvent) {
 </script>
 
 <template>
-    <button :class="['circle', 'transparent', active && 'active']" :disabled="disabled" @click="onClick" v-bind="$attrs">
+    <button :class="['circle', 'transparent', 'slow-ripple', active && 'active']" :disabled="disabled" @click="onClick" v-bind="$attrs">
         <i v-if="icon">{{ icon }}</i>
         <slot />
     </button>

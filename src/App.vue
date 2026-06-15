@@ -1,52 +1,262 @@
 <script setup lang="ts">
 import { useTheme } from "./composables/useTheme";
+import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
+import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
+import TodayDetailPanel from "./components/todo/TodayDetailPanel.vue";
 import QmIconButton from "./components/ui/QmIconButton.vue";
 import QmTitleBar from "./components/ui/QmTitleBar.vue";
-import { ref } from "vue";
+import { navItems, type NavItemKey } from "./config/navItems";
+import { useTasks } from "./composables/useTasks";
+import type { TodoTask, TodoTaskInput } from "./types/todo";
+import { getTodayDateValue } from "./utils/formatDueText";
+import ArchiveView from "./views/ArchiveView.vue";
+import CompletedView from "./views/CompletedView.vue";
+import SettingsView from "./views/SettingsView.vue";
+import TodayTodoView from "./views/TodayTodoView.vue";
+import UpcomingView from "./views/UpcomingView.vue";
+import { computed, onBeforeUnmount, ref } from "vue";
+
+type NavItemWithCount = (typeof navItems)[number] & { count?: number };
+
+const DEFAULT_DETAIL_PANEL_WIDTH = 220;
+const MIN_DETAIL_PANEL_WIDTH = 180;
+const MIN_RESPONSIVE_DETAIL_PANEL_WIDTH = 96;
+const MAX_DETAIL_PANEL_WIDTH = 420;
+const APP_HORIZONTAL_PADDING = 48;
+const PANEL_GAP = 24;
+const MAIN_PANEL_MIN_WIDTH = 360;
+const SIDEBAR_EXPANDED_WIDTH = 140;
+const SIDEBAR_COLLAPSED_WIDTH = 48;
 
 // 当前选中的侧边栏导航项。
 // 这个值只用来判断哪个按钮需要追加 archive 选中态 class。
-const activeNav = ref("");
+const activeNav = ref<NavItemKey>("today-todo");
 
 // 侧边栏是否收起：
 // false = 展开完整侧栏；true = 收成只显示头像和图标的窄栏。
 const sidebarCollapsed = ref(false);
 
 const { cycleMode, themeMode } = useTheme();
+const {
+  tasks,
+  todayTasks,
+  upcomingTasks,
+  completedTasks,
+  archivedTasks,
+  selectedTask,
+  navCounts,
+  reorderTasks,
+  toggleTaskComplete,
+  selectTask,
+  clearSelectedTask,
+  addTask,
+  updateTask,
+  deleteTask,
+  archiveTask,
+} = useTasks();
+const isNewTaskDialogOpen = ref(false);
+const isEditTaskDialogOpen = ref(false);
+const isDeleteTaskDialogOpen = ref(false);
+const taskPendingEdit = ref<TodoTask | null>(null);
+const taskIdPendingDelete = ref<string | null>(null);
+const detailPanelWidth = ref(DEFAULT_DETAIL_PANEL_WIDTH);
+const showDetailPanel = computed(() => activeNav.value === "today-todo");
+const navItemsWithCounts = computed<NavItemWithCount[]>(() =>
+  navItems.map((item) => {
+    if (item.key === "today-todo") {
+      return { ...item, count: navCounts.value.today };
+    }
 
-// 侧栏导航数据集中维护：
-// 展开态的完整按钮和收起态的 QmIconButton 共用这一份配置。
-const navItems = [
-  { key: "today-todo", icon: "today", label: "今日", count: 1 },
-  { key: "upcoming", icon: "event_upcoming", label: "待办", count: 1 },
-  { key: "today", icon: "today", label: "已完成", count: 1 },
-  { key: "archive", icon: "archive", label: "归档", count: 1 },
-  { key: "settings", icon: "settings", label: "设置", count: 1 },
-];
+    if (item.key === "upcoming") {
+      return { ...item, count: navCounts.value.upcoming };
+    }
+
+    if (item.key === "completed") {
+      return { ...item, count: navCounts.value.completed };
+    }
+
+    if (item.key === "archive") {
+      return { ...item, count: navCounts.value.archive };
+    }
+
+    return item;
+  }),
+);
+const taskPendingDelete = computed(() =>
+  taskIdPendingDelete.value
+    ? todayTasks.value
+        .concat(upcomingTasks.value, completedTasks.value, archivedTasks.value)
+        .find((task) => task.id === taskIdPendingDelete.value)
+    : null,
+);
+const isResizingDetailPanel = ref(false);
+const windowWidth = ref(window.innerWidth);
+const currentSidebarWidth = computed(() =>
+  sidebarCollapsed.value ? SIDEBAR_COLLAPSED_WIDTH : SIDEBAR_EXPANDED_WIDTH,
+);
+const maxResponsiveDetailPanelWidth = computed(() => {
+  const availableWidth =
+    windowWidth.value -
+    APP_HORIZONTAL_PADDING -
+    currentSidebarWidth.value -
+    MAIN_PANEL_MIN_WIDTH -
+    PANEL_GAP * 2;
+
+  return Math.max(MIN_RESPONSIVE_DETAIL_PANEL_WIDTH, Math.min(availableWidth, MAX_DETAIL_PANEL_WIDTH));
+});
+const resolvedDetailPanelWidth = computed(() =>
+  Math.max(
+    MIN_RESPONSIVE_DETAIL_PANEL_WIDTH,
+    Math.min(detailPanelWidth.value, maxResponsiveDetailPanelWidth.value),
+  ),
+);
+const detailPanelWidthStyle = computed(() => `${resolvedDetailPanelWidth.value}px`);
 
 // 标题栏最左侧按钮的点击行为。
 // 点击时只切换 sidebarCollapsed，按钮图标和侧栏样式都通过这个状态自动联动。
 const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value;
 };
+
+const selectNavItem = (key: NavItemKey) => {
+  if (key === "add") {
+    isNewTaskDialogOpen.value = true;
+    return;
+  }
+
+  activeNav.value = key;
+};
+
+const createTodayTask = (input: TodoTaskInput) => {
+  addTask(input);
+  activeNav.value = "today-todo";
+};
+
+const requestEditTask = (id: string) => {
+  taskPendingEdit.value = tasks.value.find((task) => task.id === id) ?? null;
+  if (!taskPendingEdit.value) {
+    return;
+  }
+
+  isEditTaskDialogOpen.value = true;
+};
+
+const updateTaskFromDialog = (input: TodoTaskInput) => {
+  if (!taskPendingEdit.value) {
+    return;
+  }
+
+  const editingTaskId = taskPendingEdit.value.id;
+  const wasSelectedTodayTask = selectedTask.value?.id === editingTaskId;
+  const wasTodayPage = activeNav.value === "today-todo";
+  updateTask({
+    id: editingTaskId,
+    ...input,
+  });
+
+  const nextTask = tasks.value.find((task) => task.id === editingTaskId) ?? null;
+
+  taskPendingEdit.value = nextTask;
+
+  if (!nextTask) {
+    isEditTaskDialogOpen.value = false;
+    clearSelectedTask();
+    return;
+  }
+
+  if (wasSelectedTodayTask) {
+    // Today 视图规则（见 taskViews.ts）：today-due、unarchived 的任务都留在 today，
+    // 包括已完成的。所以判断"是否仍属于 today"只需看 dueDate + archived，
+    // 不需要排除 completed 任务。
+    const staysInToday = nextTask.dueDate === getTodayDateValue() && !nextTask.archived;
+
+    if (wasTodayPage && staysInToday) {
+      selectTask(editingTaskId);
+    } else {
+      clearSelectedTask();
+    }
+  }
+};
+
+const requestDeleteTask = (id: string) => {
+  taskIdPendingDelete.value = id;
+  isDeleteTaskDialogOpen.value = true;
+};
+
+const confirmDeleteTask = () => {
+  if (!taskIdPendingDelete.value) {
+    return;
+  }
+
+  deleteTask(taskIdPendingDelete.value);
+  taskIdPendingDelete.value = null;
+};
+
+const updateDetailPanelWidth = (clientX: number) => {
+  const availableRightSpace = window.innerWidth - clientX - 24;
+  const nextWidth = Math.min(
+    Math.max(availableRightSpace, MIN_DETAIL_PANEL_WIDTH),
+    maxResponsiveDetailPanelWidth.value,
+  );
+
+  detailPanelWidth.value = nextWidth;
+};
+
+const stopResizeDetailPanel = () => {
+  if (!isResizingDetailPanel.value) {
+    return;
+  }
+
+  isResizingDetailPanel.value = false;
+  window.removeEventListener("pointermove", onResizeDetailPanelMove);
+  window.removeEventListener("pointerup", stopResizeDetailPanel);
+  window.removeEventListener("pointercancel", stopResizeDetailPanel);
+};
+
+const onResizeDetailPanelMove = (event: PointerEvent) => {
+  if (!isResizingDetailPanel.value) {
+    return;
+  }
+
+  updateDetailPanelWidth(event.clientX);
+};
+
+const startResizeDetailPanel = (event: PointerEvent) => {
+  event.preventDefault();
+  isResizingDetailPanel.value = true;
+  updateDetailPanelWidth(event.clientX);
+
+  window.addEventListener("pointermove", onResizeDetailPanelMove);
+  window.addEventListener("pointerup", stopResizeDetailPanel);
+  window.addEventListener("pointercancel", stopResizeDetailPanel);
+};
+
+const onWindowResize = () => {
+  windowWidth.value = window.innerWidth;
+};
+
+window.addEventListener("resize", onWindowResize);
+
+onBeforeUnmount(() => {
+  window.removeEventListener("pointermove", onResizeDetailPanelMove);
+  window.removeEventListener("pointerup", stopResizeDetailPanel);
+  window.removeEventListener("pointercancel", stopResizeDetailPanel);
+  window.removeEventListener("resize", onWindowResize);
+});
 </script>
 
 <template>
   <div class="app-shell">
     <!-- icon="checklist" title="Qtodo" -->
-    <QmTitleBar class="app-title-bar"> 
+    <QmTitleBar class="app-title-bar">
       <template #left-action>
         <!-- 展开时显示 menu，收起时显示 sort，让按钮图标表达当前侧栏状态。 -->
-        <QmIconButton
-          class="title-left-action"
-          :icon="sidebarCollapsed ? 'sort' : 'menu'"
-          @click="toggleSidebar"
-        />
+        <QmIconButton class="title-left-action slow-ripple" :icon="sidebarCollapsed ? 'sort' : 'menu'" @click="toggleSidebar" />
       </template>
 
       <template #actions>
         <!-- 这里显示的是当前主题模式对应的图标。 -->
-        <QmIconButton class="theme-mode"
+        <QmIconButton class="theme-mode slow-ripple"
           :icon="themeMode === 'auto' ? 'brightness_auto' : themeMode === 'light' ? 'light_mode' : 'dark_mode'"
           @click="cycleMode" />
       </template>
@@ -59,7 +269,16 @@ const toggleSidebar = () => {
       2. 侧栏内部内容显隐
       3. 侧栏按钮对齐方式
     -->
-    <div :class="['app-body', { 'collapsed-sidebar': sidebarCollapsed }]">
+    <div
+      :class="[
+        'app-body',
+        {
+          'collapsed-sidebar': sidebarCollapsed,
+          'with-detail-panel': showDetailPanel,
+        },
+      ]"
+      :style="{ '--detail-panel-width': detailPanelWidthStyle }"
+    >
       <div class="app-sidebar">
         <div class="sidebar-profile">
           <!-- 收起时头像从 small 切到 tiny，避免 48px 窄栏里显得拥挤。 -->
@@ -71,42 +290,102 @@ const toggleSidebar = () => {
           </div>
         </div>
         <nav class="sidebar-nav group ">
-          <template v-for="item in navItems" :key="item.key">
+          <template v-for="item in navItemsWithCounts" :key="item.key">
             <!-- 收起态使用真正的 icon-only 组件，避免 BeerCSS medium 文字按钮撑开窄栏。 -->
-            <QmIconButton
-              v-if="sidebarCollapsed"
-              class="sidebar-icon-action"
-              :class="{ archive: activeNav === item.key }"
-              :icon="item.icon"
-              :active="activeNav === item.key"
-              :aria-label="item.label"
-              :title="item.label"
-              @click="activeNav = item.key"
-            />
+            <QmIconButton v-if="sidebarCollapsed" class="sidebar-icon-action slow-ripple"
+              :class="{ archive: activeNav === item.key }" :icon="item.icon" :active="activeNav === item.key"
+              :aria-label="item.label" :title="item.label" @click="selectNavItem(item.key)" />
 
             <!-- 展开态保留完整按钮，显示 icon、文字和 badge。 -->
-            <button
-              v-else
-              type="button"
-              :class="['no-round', activeNav === item.key && 'archive', 'medium']"
-              @click="activeNav = item.key"
-            >
+            <button v-else type="button" :class="['no-round slow-ripple', activeNav === item.key && 'archive', 'medium']"
+              @click="selectNavItem(item.key)">
               <i>{{ item.icon }}</i>
               <span class="nav-label">{{ item.label }}</span>
-              <span class="badge none">{{ item.count }}</span>
+              <span v-if="item.count !== undefined" class="badge none">{{ item.count }}</span>
             </button>
           </template>
         </nav>
         <!-- 侧边栏内容 -->
       </div>
       <div class="app-main-panel">
-
+        <TodayTodoView
+          v-if="activeNav === 'today-todo'"
+          :tasks="todayTasks"
+          :can-edit="true"
+          @reorder="reorderTasks('today', $event)"
+          @toggle-complete="toggleTaskComplete"
+          @select="selectTask"
+          @clear-selection="clearSelectedTask"
+          @edit="requestEditTask"
+          @delete="requestDeleteTask"
+          @archive="archiveTask"
+        />
+        <UpcomingView
+          v-else-if="activeNav === 'upcoming'"
+          :tasks="upcomingTasks"
+          :can-edit="true"
+          @reorder="reorderTasks('upcoming', $event)"
+          @toggle-complete="toggleTaskComplete"
+          @edit="requestEditTask"
+          @delete="requestDeleteTask"
+        />
+        <CompletedView
+          v-else-if="activeNav === 'completed'"
+          :tasks="completedTasks"
+          :can-edit="true"
+          @toggle-complete="toggleTaskComplete"
+          @edit="requestEditTask"
+          @delete="requestDeleteTask"
+          @archive="archiveTask"
+        />
+        <ArchiveView
+          v-else-if="activeNav === 'archive'"
+          :tasks="archivedTasks"
+          @delete="requestDeleteTask"
+        />
+        <SettingsView v-else-if="activeNav === 'settings'" />
       </div>
-      <div class="app-detail-panel">
-
+      <div
+        v-if="showDetailPanel"
+        :class="['app-resize-handle', { active: isResizingDetailPanel }]"
+        role="separator"
+        aria-orientation="vertical"
+        aria-label="调整详情栏宽度"
+        :aria-valuemin="MIN_DETAIL_PANEL_WIDTH"
+        :aria-valuemax="MAX_DETAIL_PANEL_WIDTH"
+        :aria-valuenow="resolvedDetailPanelWidth"
+        @pointerdown="startResizeDetailPanel"
+      ></div>
+      <div v-if="showDetailPanel" class="app-detail-panel">
+        <TodayDetailPanel
+          :tasks="todayTasks"
+          :selected-task="selectedTask"
+          @clear-selection="clearSelectedTask"
+          @toggle-complete="toggleTaskComplete"
+          @edit="requestEditTask"
+          @archive="archiveTask"
+          @delete="requestDeleteTask"
+        />
       </div>
 
     </div>
+
+    <NewTaskDialog
+      v-model="isNewTaskDialogOpen"
+      mode="create"
+      @create="createTodayTask"
+    />
+    <NewTaskDialog
+      v-model="isEditTaskDialogOpen"
+      mode="edit"
+      :task="taskPendingEdit"
+      @update="updateTaskFromDialog"
+    />
+    <DeleteTaskDialog
+      v-model="isDeleteTaskDialogOpen"
+      :task-description="taskPendingDelete?.description"
+      @confirm="confirmDeleteTask"
+    />
   </div>
 </template>
 
@@ -120,6 +399,11 @@ const toggleSidebar = () => {
   display: flex;
   flex-direction: column;
   background-color: var(--app-background);
+}
+
+.app-shell:has(.app-resize-handle.active) {
+  cursor: col-resize;
+  user-select: none;
 }
 
 .app-shell .title-left-action {
@@ -152,11 +436,11 @@ const toggleSidebar = () => {
 .app-body {
   flex: 1;
   display: grid;
-  /* 展开状态：左侧栏 140px，中间栏自适应，右侧详情栏 180px。 */
-  grid-template-columns: 140px minmax(200px, 1fr) 180px;
+  /* 默认：左侧栏 + 主内容。只有今日页会追加详情栏。 */
+  grid-template-columns: 140px minmax(360px, 1fr);
   min-height: 0;
   overflow: hidden;
-  gap: 24px;
+  column-gap: 24px;
 
   padding-top: 5px;
   padding-bottom: 32px;
@@ -164,9 +448,18 @@ const toggleSidebar = () => {
   padding-right: 24px;
 }
 
+.app-body.with-detail-panel {
+  position: relative;
+  grid-template-columns: 140px minmax(360px, 1fr) var(--detail-panel-width);
+}
+
 .app-body.collapsed-sidebar {
   /* 收起状态：只把左侧栏压到 48px，中间栏会自动获得释放出来的空间。 */
-  grid-template-columns: 48px minmax(200px, 1fr) 180px;
+  grid-template-columns: 48px minmax(360px, 1fr);
+}
+
+.app-body.collapsed-sidebar.with-detail-panel {
+  grid-template-columns: 48px minmax(360px, 1fr) var(--detail-panel-width);
 }
 
 /* 侧边栏内容 */
@@ -233,7 +526,39 @@ const toggleSidebar = () => {
 }
 
 /* 详情面板 */
+.app-resize-handle {
+  position: absolute;
+  top: 5px;
+  right: calc(var(--detail-panel-width) + 30px);
+  bottom: 32px;
+  width: 12px;
+  border-radius: 999px;
+  background-color: transparent;
+  cursor: col-resize;
+  touch-action: none;
+  z-index: 2;
+}
+
+.app-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: 50%;
+  width: 1px;
+  border-radius: 999px;
+  background-color: transparent;
+  transform: translateX(-50%);
+}
+
+.app-resize-handle:hover::before,
+.app-resize-handle.active::before {
+  background-color: color-mix(in srgb, var(--outline-variant) 72%, transparent);
+}
+
 .app-detail-panel {
+  display: flex;
+  overflow: hidden;
   min-width: 0;
   background-color: var(--panel-background);
   border-radius: 28px;

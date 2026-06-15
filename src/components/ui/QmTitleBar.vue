@@ -62,7 +62,7 @@ const startDragging = async (event: MouseEvent) => {
     <div class="titlebar" v-bind="$attrs">
         <div class="titlebar-left">
             <slot name="left-action">
-                <button v-if="showLeftAction" class="circle transparent" type="button" :aria-label="leftActionLabel"
+                <button v-if="showLeftAction" class="circle transparent slow-ripple" type="button" :aria-label="leftActionLabel"
                     @click="onLeftActionClick">
                     <i>{{ leftActionIcon }}</i>
                 </button>
@@ -83,15 +83,15 @@ const startDragging = async (event: MouseEvent) => {
         </div>
 
         <div v-if="showControls" class="window-controls">
-            <button class="circle transparent" type="button" aria-label="最小化" @click="minimizeWindow">
+            <button class="circle transparent slow-ripple" type="button" aria-label="最小化" @click="minimizeWindow">
                 <i>remove</i>
             </button>
 
-            <button class="circle transparent" type="button" aria-label="最大化或还原" @click="toggleMaximizeWindow">
+            <button class="circle transparent slow-ripple" type="button" aria-label="最大化或还原" @click="toggleMaximizeWindow">
                 <i>crop_square</i>
             </button>
 
-            <button class="circle transparent close-button" type="button" aria-label="关闭" @click="closeWindow">
+            <button class="circle transparent close-button slow-ripple" type="button" aria-label="关闭" @click="closeWindow">
                 <i>close</i>
             </button>
         </div>

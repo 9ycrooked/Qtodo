@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900">
+  <defs>
+    <style>
+      .bg{fill:#111018}.shell{fill:#1b1922}.surface{fill:#24212d}.surface2{fill:#302c3a}.primary{fill:#d0bcff}
+      .primaryBox{fill:#3d3358}.green{fill:#9bd79b}.greenBox{fill:#233b2a}.amber{fill:#ffd28a}.amberBox{fill:#4b3820}
+      .ink{fill:#f3edf7}.muted{fill:#cac4d0}.line{stroke:#4a4458;stroke-width:1.5}.shadow{filter:url(#shadow)}
+      .h1{font:700 34px "Microsoft YaHei", Arial, sans-serif}.h2{font:700 22px "Microsoft YaHei", Arial, sans-serif}.h3{font:700 16px "Microsoft YaHei", Arial, sans-serif}
+      .body{font:400 14px "Microsoft YaHei", Arial, sans-serif}.label{font:700 12px "Microsoft YaHei", Arial, sans-serif}.tiny{font:400 12px "Microsoft YaHei", Arial, sans-serif}
+    </style>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="18" stdDeviation="22" flood-color="#000" flood-opacity=".28"/>
+    </filter>
+  </defs>
+  <rect class="bg" width="1440" height="900"/>
+  <rect x="28" y="28" width="1384" height="844" rx="34" class="shell"/>
+  <rect x="52" y="52" width="210" height="796" rx="28" class="surface shadow"/>
+  <rect x="286" y="52" width="780" height="796" rx="28" class="surface shadow"/>
+  <rect x="1090" y="52" width="298" height="796" rx="28" class="surface shadow"/>
+  <circle cx="92" cy="96" r="22" fill="#d0bcff"/>
+  <text x="92" y="105" text-anchor="middle" fill="#241b35" font-family="Arial" font-size="22" font-weight="700">✓</text>
+  <text x="126" y="92" class="h3 ink">待办流</text>
+  <text x="126" y="114" class="tiny muted">BeerCSS 暗色看板</text>
+  <rect x="76" y="154" width="162" height="44" rx="22" fill="#d0bcff"/>
+  <text x="112" y="181" fill="#241b35" class="body">＋ 新建任务</text>
+  <rect x="76" y="232" width="162" height="46" rx="23" class="primaryBox"/>
+  <text x="112" y="261" class="h3 primary">今天</text><text x="218" y="261" text-anchor="end" class="label primary">8</text>
+  <text x="112" y="321" class="body muted">收件箱</text><text x="218" y="321" text-anchor="end" class="label muted">12</text>
+  <text x="112" y="373" class="body muted">即将开始</text><text x="218" y="373" text-anchor="end" class="label muted">5</text>
+  <text x="112" y="425" class="body muted">已完成</text><text x="218" y="425" text-anchor="end" class="label muted">24</text>
+  <text x="112" y="477" class="body muted">归档</text>
+  <text x="76" y="552" class="label muted">标签</text>
+  <rect x="76" y="574" width="74" height="32" rx="16" class="primaryBox"/><text x="113" y="595" text-anchor="middle" class="tiny primary">设计</text>
+  <rect x="158" y="574" width="80" height="32" rx="16" class="greenBox"/><text x="198" y="595" text-anchor="middle" class="tiny green">开发</text>
+  <rect x="76" y="616" width="102" height="32" rx="16" class="amberBox"/><text x="127" y="637" text-anchor="middle" class="tiny amber">会议</text>
+  <text x="324" y="110" class="h1 ink">今天</text>
+  <text x="324" y="138" class="body muted">6 月 11 日，星期四 · 计划 8 个任务</text>
+  <rect x="804" y="78" width="224" height="48" rx="24" class="surface2 line"/>
+  <text x="836" y="108" class="body muted">搜索任务</text>
+  <circle cx="997" cy="102" r="17" class="primaryBox"/><text x="997" y="108" text-anchor="middle" class="body primary">⌕</text>
+  <rect x="324" y="174" width="704" height="62" rx="31" class="surface2 line"/>
+  <text x="356" y="212" class="body muted">输入任务，按 Enter 添加</text>
+  <rect x="900" y="188" width="104" height="34" rx="17" fill="#d0bcff"/>
+  <text x="952" y="211" text-anchor="middle" fill="#241b35" class="label">添加</text>
+  <rect x="324" y="260" width="92" height="36" rx="18" fill="#d0bcff"/><text x="370" y="283" text-anchor="middle" fill="#241b35" class="label">全部</text>
+  <rect x="428" y="260" width="104" height="36" rx="18" class="surface2"/><text x="480" y="283" text-anchor="middle" class="label muted">待办</text>
+  <rect x="544" y="260" width="128" height="36" rx="18" class="surface2"/><text x="608" y="283" text-anchor="middle" class="label muted">已完成</text>
+  <rect x="684" y="260" width="112" height="36" rx="18" class="surface2"/><text x="740" y="283" text-anchor="middle" class="label muted">高优先级</text>
+  <rect x="324" y="330" width="704" height="86" rx="24" fill="#1f1d28" class="line"/>
+  <circle cx="362" cy="373" r="14" fill="#1f1d28" stroke="#d0bcff" stroke-width="3"/>
+  <text x="392" y="362" class="h3 ink">在 Illustrator 中设计 BeerCSS 待办看板</text>
+  <text x="392" y="389" class="body muted">界面设计 · 今天 15:00 截止</text>
+  <rect x="888" y="356" width="84" height="32" rx="16" class="amberBox"/><text x="930" y="377" text-anchor="middle" class="tiny amber">高</text>
+  <rect x="324" y="430" width="704" height="86" rx="24" fill="#1f1d28" class="line"/>
+  <circle cx="362" cy="473" r="14" fill="#9bd79b"/><text x="362" y="479" text-anchor="middle" fill="#132016" font-family="Arial" font-size="16">✓</text>
+  <text x="392" y="462" class="h3 ink" text-decoration="line-through">收集 Material 组件参考</text>
+  <text x="392" y="489" class="body muted">资料整理 · 10:40 已完成</text>
+  <rect x="888" y="456" width="96" height="32" rx="16" class="greenBox"/><text x="936" y="477" text-anchor="middle" class="tiny green">完成</text>
+  <rect x="324" y="530" width="704" height="86" rx="24" fill="#1f1d28" class="line"/>
+  <circle cx="362" cy="573" r="14" fill="#1f1d28" stroke="#7b7488" stroke-width="3"/>
+  <text x="392" y="562" class="h3 ink">准备筛选标签和任务卡片交互态</text>
+  <text x="392" y="589" class="body muted">原型设计 · 明天截止</text>
+  <rect x="888" y="556" width="104" height="32" rx="16" class="primaryBox"/><text x="940" y="577" text-anchor="middle" class="tiny primary">设计</text>
+  <rect x="324" y="630" width="704" height="86" rx="24" fill="#1f1d28" class="line"/>
+  <circle cx="362" cy="673" r="14" fill="#1f1d28" stroke="#7b7488" stroke-width="3"/>
+  <text x="392" y="662" class="h3 ink">检查桌面端间距与响应布局</text>
+  <text x="392" y="689" class="body muted">质量检查 · 今天 18:30 截止</text>
+  <rect x="888" y="656" width="88" height="32" rx="16" class="surface2"/><text x="932" y="677" text-anchor="middle" class="tiny muted">普通</text>
+  <text x="1128" y="110" class="h2 ink">任务详情</text>
+  <rect x="1128" y="142" width="222" height="132" rx="24" class="primaryBox"/>
+  <text x="1152" y="180" class="h3 primary">当前任务</text>
+  <text x="1152" y="210" class="body primary">设计看板</text>
+  <text x="1152" y="238" class="tiny muted">高优先级 · 今天 15:00</text>
+  <text x="1128" y="324" class="h2 ink">今日进度</text>
+  <circle cx="1239" cy="432" r="78" fill="none" stroke="#3a3547" stroke-width="20"/>
+  <path d="M1239 354 A78 78 0 1 1 1183 486" fill="none" stroke="#d0bcff" stroke-width="20" stroke-linecap="round"/>
+  <text x="1239" y="426" text-anchor="middle" class="h1 ink">62%</text>
+  <text x="1239" y="454" text-anchor="middle" class="body muted">已完成 5 / 8</text>
+  <text x="1128" y="570" class="h2 ink">快捷备注</text>
+  <rect x="1128" y="600" width="222" height="110" rx="24" class="surface2 line"/>
+  <text x="1152" y="636" class="body muted">暗色表面减少眩光，</text>
+  <text x="1152" y="662" class="body muted">主色保留 Material You</text>
+  <text x="1152" y="688" class="body muted">的柔和紫色层级。</text>
+  <rect x="1128" y="748" width="222" height="58" rx="29" fill="#d0bcff"/>
+  <text x="1239" y="783" text-anchor="middle" fill="#241b35" class="h3">导出 UI 套件</text>
+</svg>

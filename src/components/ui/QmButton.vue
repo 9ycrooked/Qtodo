@@ -129,7 +129,7 @@ const beercssClass = computed(() => {
 
 <template>
 
-    <button :class="[beercssClass, isInactive && 'disabled']" :disabled="isInactive" :type="type" @click="onClick"
+    <button :class="[beercssClass, 'slow-ripple', isInactive && 'disabled']" :disabled="isInactive" :type="type" @click="onClick"
         v-bind="$attrs">
         <i v-if="loading">progress_activity</i>
         <img v-else-if="image" class="responsive" :src="image" alt="" />
