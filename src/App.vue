@@ -8,7 +8,7 @@ import QmTitleBar from "./components/ui/QmTitleBar.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
 import { useTasks } from "./composables/useTasks";
 import type { TodoTask, TodoTaskInput } from "./types/todo";
-import { getTodayDateValue } from "./utils/formatDueText";
+import { currentDate } from "./utils/currentDate";
 import ArchiveView from "./views/ArchiveView.vue";
 import CompletedView from "./views/CompletedView.vue";
 import SettingsView from "./views/SettingsView.vue";
@@ -168,7 +168,7 @@ const updateTaskFromDialog = (input: TodoTaskInput) => {
     // Today 视图规则（见 taskViews.ts）：today-due、unarchived 的任务都留在 today，
     // 包括已完成的。所以判断"是否仍属于 today"只需看 dueDate + archived，
     // 不需要排除 completed 任务。
-    const staysInToday = nextTask.dueDate === getTodayDateValue() && !nextTask.archived;
+    const staysInToday = nextTask.dueDate === currentDate() && !nextTask.archived;
 
     if (wasTodayPage && staysInToday) {
       selectTask(editingTaskId);
