@@ -3,46 +3,24 @@ import { invoke } from "@tauri-apps/api/core";
 import type { TodoTask, TodoTaskEditInput, TodoTaskInput, TodoViewKey } from "../types/todo";
 import { reorderTasksForView } from "../utils/taskViews";
 
-const initialTasks: TodoTask[] = [
-  {
-    id: "task-1",
-    title: "界面设计",
-    description: "在 Illustrator 中设计 BeerCSS 待办看板",
-    dueDate: "2026-06-14",
-    dueTime: "15:00",
-    completed: false,
-    archived: false,
-    priority: "high",
-    createdAt: "2026-06-14T08:00:00.000Z",
-    updatedAt: "2026-06-14T08:00:00.000Z",
-  },
-  {
-    id: "task-2",
-    title: "整理 QTodo 首页任务列表组件",
-    description: "组件封装",
-    dueDate: "2026-06-14",
-    dueTime: "18:00",
-    completed: true,
-    archived: false,
-    priority: "medium",
-    createdAt: "2026-06-14T09:00:00.000Z",
-    updatedAt: "2026-06-14T10:00:00.000Z",
-    completedAt: "2026-06-14T10:00:00.000Z",
-  },
-  {
-    id: "task-3",
-    title: "检查深色主题下的任务条可读性",
-    description: "视觉检查",
-    dueDate: "2026-06-14",
-    completed: true,
-    archived: true,
-    priority: "low",
-    createdAt: "2026-06-14T09:30:00.000Z",
-    updatedAt: "2026-06-14T11:00:00.000Z",
-    completedAt: "2026-06-14T10:30:00.000Z",
-    archivedAt: "2026-06-14T11:00:00.000Z",
-  },
-];
+/**
+ * Module-level singleton promise so that multiple `useTasks()` calls
+ * within the same app session only trigger one `load_all_tasks` invoke.
+ */
+let initPromise: Promise<void> | null = null;
+const ensureLoaded = (tasks: ReturnType<typeof ref<TodoTask[]>>) => {
+  if (!initPromise) {
+    initPromise = invoke<TodoTask[]>("load_all_tasks")
+      .then((loaded) => {
+        tasks.value = loaded;
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error("[qtodo] load_all_tasks failed:", err);
+      });
+  }
+  return initPromise;
+};
 
 /**
  * Lifecycle transition events.
@@ -64,9 +42,12 @@ type TransitionEvent =
     };
 
 export const useTasks = () => {
-  const tasks = ref<TodoTask[]>([...initialTasks]);
+  const tasks = ref<TodoTask[]>([]);
   const selectedTaskId = ref<string | null>(null);
-  const nextTaskId = ref(initialTasks.length + 1);
+  const nextTaskId = ref(1);
+
+  // Load tasks from SQLite on first use (module-level singleton guard).
+  ensureLoaded(tasks);
 
   // Verify the backend SQLite storage path on first use. Issue #7 plumbing:
   // the Tauri command returns the absolute path of qtodo.db so the frontend
@@ -122,6 +103,14 @@ export const useTasks = () => {
             updatedAt: nowIso,
           };
         });
+        // Fire-and-forget: persist toggled state to SQLite
+        const toggled = tasks.value.find((t) => t.id === id);
+        if (toggled) {
+          invoke("save_task", { task: toggled }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[qtodo] save_task (toggle) failed:", err);
+          });
+        }
         return;
       }
 
@@ -146,6 +135,11 @@ export const useTasks = () => {
 
         tasks.value = [task, ...tasks.value];
         selectedTaskId.value = id;
+        // Fire-and-forget: persist new task to SQLite
+        invoke("save_task", { task }).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("[qtodo] save_task (create) failed:", err);
+        });
         return;
       }
 
@@ -155,6 +149,11 @@ export const useTasks = () => {
         if (selectedTaskId.value === id) {
           clearSelectedTask();
         }
+        // Fire-and-forget: delete from SQLite
+        invoke("delete_task", { id }).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("[qtodo] delete_task failed:", err);
+        });
         return;
       }
 
@@ -176,6 +175,14 @@ export const useTasks = () => {
         if (selectedTaskId.value === id) {
           clearSelectedTask();
         }
+        // Fire-and-forget: persist archived state to SQLite
+        const archived = tasks.value.find((t) => t.id === id);
+        if (archived) {
+          invoke("save_task", { task: archived }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[qtodo] save_task (archive) failed:", err);
+          });
+        }
         return;
       }
 
@@ -196,6 +203,14 @@ export const useTasks = () => {
             viewOrders: task.viewOrders,
           };
         });
+        // Fire-and-forget: persist updated task to SQLite
+        const updated = tasks.value.find((t) => t.id === payload.id);
+        if (updated) {
+          invoke("save_task", { task: updated }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[qtodo] save_task (update) failed:", err);
+          });
+        }
         return;
       }
 
