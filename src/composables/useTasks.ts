@@ -199,36 +199,12 @@ export const useTasks = () => {
     transition({ type: "reorder", viewKey, ordered: orderedViewTasks });
   };
 
-  const toggleTaskComplete = (id: string, completed: boolean) => {
-    transition({ type: "toggle-complete", id, completed });
-  };
-
-  const addTask = (input: TodoTaskInput) => {
-    transition({ type: "create", payload: input });
-  };
-
-  const deleteTask = (id: string) => {
-    transition({ type: "delete", id });
-  };
-
-  const archiveTask = (id: string) => {
-    transition({ type: "archive", id });
-  };
-
-  const updateTask = (input: TodoTaskEditInput) => {
-    transition({ type: "update", payload: input });
-  };
-
   return {
     tasks,
     selectedTask,
-    addTask,
-    archiveTask,
+    transition,
     clearSelectedTask,
-    deleteTask,
     reorderTasks,
     selectTask,
-    updateTask,
-    toggleTaskComplete,
   };
 };

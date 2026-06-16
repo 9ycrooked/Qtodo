@@ -42,13 +42,9 @@ const {
   tasks,
   selectedTask,
   reorderTasks,
-  toggleTaskComplete,
+  transition,
   selectTask,
   clearSelectedTask,
-  addTask,
-  updateTask,
-  deleteTask,
-  archiveTask,
 } = useTasks();
 const isNewTaskDialogOpen = ref(false);
 const isEditTaskDialogOpen = ref(false);
@@ -127,7 +123,7 @@ const selectNavItem = (key: NavItemKey) => {
 };
 
 const createTodayTask = (input: TodoTaskInput) => {
-  addTask(input);
+  transition({ type: "create", payload: input });
   activeNav.value = "today-todo";
 };
 
@@ -148,9 +144,12 @@ const updateTaskFromDialog = (input: TodoTaskInput) => {
   const editingTaskId = taskPendingEdit.value.id;
   const wasSelectedTodayTask = selectedTask.value?.id === editingTaskId;
   const wasTodayPage = activeNav.value === "today-todo";
-  updateTask({
-    id: editingTaskId,
-    ...input,
+  transition({
+    type: "update",
+    payload: {
+      id: editingTaskId,
+      ...input,
+    },
   });
 
   const nextTask = tasks.value.find((task) => task.id === editingTaskId) ?? null;
@@ -187,7 +186,7 @@ const confirmDeleteTask = () => {
     return;
   }
 
-  deleteTask(taskIdPendingDelete.value);
+  transition({ type: "delete", id: taskIdPendingDelete.value });
   taskIdPendingDelete.value = null;
 };
 
@@ -312,19 +311,19 @@ onBeforeUnmount(() => {
           :tasks="todayTasks"
           :can-edit="true"
           @reorder="reorderTasks('today', $event)"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @select="selectTask"
           @clear-selection="clearSelectedTask"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
         />
         <UpcomingView
           v-else-if="activeNav === 'upcoming'"
           :tasks="upcomingTasks"
           :can-edit="true"
           @reorder="reorderTasks('upcoming', $event)"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
         />
@@ -332,10 +331,10 @@ onBeforeUnmount(() => {
           v-else-if="activeNav === 'completed'"
           :tasks="completedTasks"
           :can-edit="true"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
         />
         <ArchiveView
           v-else-if="activeNav === 'archive'"
@@ -360,9 +359,9 @@ onBeforeUnmount(() => {
           :tasks="todayTasks"
           :selected-task="selectedTask"
           @clear-selection="clearSelectedTask"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
           @delete="requestDeleteTask"
         />
       </div>
