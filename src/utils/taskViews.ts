@@ -1,7 +1,7 @@
 import type { TodoTask, TodoViewKey } from "../types/todo";
-import { getTodayDateValue } from "./formatDueText";
+import { currentDate, DEFAULT_DUE_TIME } from "./currentDate";
 
-const dueTimeValue = (task: TodoTask) => task.dueTime ?? "23:59";
+const dueTimeValue = (task: TodoTask) => task.dueTime ?? DEFAULT_DUE_TIME;
 
 const compareDueSoonest = (a: TodoTask, b: TodoTask) => {
   const dateCompare = a.dueDate.localeCompare(b.dueDate);
@@ -58,7 +58,7 @@ const compareManualFirst = (
 export const getTasksForView = (
   tasks: TodoTask[],
   viewKey: TodoViewKey,
-  todayDate = getTodayDateValue(),
+  todayDate = currentDate(),
 ) => {
   const activeTasks = tasks.filter((task) => !task.archived);
 
@@ -85,7 +85,7 @@ export const getTasksForView = (
   return [...viewTasks].sort(compareNewestOptionalDate((task) => task.archivedAt));
 };
 
-export const getTaskViewCounts = (tasks: TodoTask[], todayDate = getTodayDateValue()) => ({
+export const getTaskViewCounts = (tasks: TodoTask[], todayDate = currentDate()) => ({
   today: getTasksForView(tasks, "today", todayDate).length,
   upcoming: getTasksForView(tasks, "upcoming", todayDate).length,
   completed: getTasksForView(tasks, "completed", todayDate).length,

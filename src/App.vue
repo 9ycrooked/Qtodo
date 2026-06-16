@@ -8,7 +8,8 @@ import QmTitleBar from "./components/ui/QmTitleBar.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
 import { useTasks } from "./composables/useTasks";
 import type { TodoTask, TodoTaskInput } from "./types/todo";
-import { getTodayDateValue } from "./utils/formatDueText";
+import { currentDate } from "./utils/currentDate";
+import { getTaskViewCounts, getTasksForView } from "./utils/taskViews";
 import ArchiveView from "./views/ArchiveView.vue";
 import CompletedView from "./views/CompletedView.vue";
 import SettingsView from "./views/SettingsView.vue";
@@ -39,20 +40,11 @@ const sidebarCollapsed = ref(false);
 const { cycleMode, themeMode } = useTheme();
 const {
   tasks,
-  todayTasks,
-  upcomingTasks,
-  completedTasks,
-  archivedTasks,
   selectedTask,
-  navCounts,
   reorderTasks,
-  toggleTaskComplete,
+  transition,
   selectTask,
   clearSelectedTask,
-  addTask,
-  updateTask,
-  deleteTask,
-  archiveTask,
 } = useTasks();
 const isNewTaskDialogOpen = ref(false);
 const isEditTaskDialogOpen = ref(false);
@@ -61,6 +53,11 @@ const taskPendingEdit = ref<TodoTask | null>(null);
 const taskIdPendingDelete = ref<string | null>(null);
 const detailPanelWidth = ref(DEFAULT_DETAIL_PANEL_WIDTH);
 const showDetailPanel = computed(() => activeNav.value === "today-todo");
+const todayTasks = computed(() => getTasksForView(tasks.value, "today"));
+const upcomingTasks = computed(() => getTasksForView(tasks.value, "upcoming"));
+const completedTasks = computed(() => getTasksForView(tasks.value, "completed"));
+const archivedTasks = computed(() => getTasksForView(tasks.value, "archive"));
+const navCounts = computed(() => getTaskViewCounts(tasks.value));
 const navItemsWithCounts = computed<NavItemWithCount[]>(() =>
   navItems.map((item) => {
     if (item.key === "today-todo") {
@@ -84,9 +81,7 @@ const navItemsWithCounts = computed<NavItemWithCount[]>(() =>
 );
 const taskPendingDelete = computed(() =>
   taskIdPendingDelete.value
-    ? todayTasks.value
-        .concat(upcomingTasks.value, completedTasks.value, archivedTasks.value)
-        .find((task) => task.id === taskIdPendingDelete.value)
+    ? tasks.value.find((task) => task.id === taskIdPendingDelete.value) ?? null
     : null,
 );
 const isResizingDetailPanel = ref(false);
@@ -128,7 +123,7 @@ const selectNavItem = (key: NavItemKey) => {
 };
 
 const createTodayTask = (input: TodoTaskInput) => {
-  addTask(input);
+  transition({ type: "create", payload: input });
   activeNav.value = "today-todo";
 };
 
@@ -149,9 +144,12 @@ const updateTaskFromDialog = (input: TodoTaskInput) => {
   const editingTaskId = taskPendingEdit.value.id;
   const wasSelectedTodayTask = selectedTask.value?.id === editingTaskId;
   const wasTodayPage = activeNav.value === "today-todo";
-  updateTask({
-    id: editingTaskId,
-    ...input,
+  transition({
+    type: "update",
+    payload: {
+      id: editingTaskId,
+      ...input,
+    },
   });
 
   const nextTask = tasks.value.find((task) => task.id === editingTaskId) ?? null;
@@ -168,7 +166,7 @@ const updateTaskFromDialog = (input: TodoTaskInput) => {
     // Today 视图规则（见 taskViews.ts）：today-due、unarchived 的任务都留在 today，
     // 包括已完成的。所以判断"是否仍属于 today"只需看 dueDate + archived，
     // 不需要排除 completed 任务。
-    const staysInToday = nextTask.dueDate === getTodayDateValue() && !nextTask.archived;
+    const staysInToday = nextTask.dueDate === currentDate() && !nextTask.archived;
 
     if (wasTodayPage && staysInToday) {
       selectTask(editingTaskId);
@@ -188,7 +186,7 @@ const confirmDeleteTask = () => {
     return;
   }
 
-  deleteTask(taskIdPendingDelete.value);
+  transition({ type: "delete", id: taskIdPendingDelete.value });
   taskIdPendingDelete.value = null;
 };
 
@@ -313,19 +311,19 @@ onBeforeUnmount(() => {
           :tasks="todayTasks"
           :can-edit="true"
           @reorder="reorderTasks('today', $event)"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @select="selectTask"
           @clear-selection="clearSelectedTask"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
         />
         <UpcomingView
           v-else-if="activeNav === 'upcoming'"
           :tasks="upcomingTasks"
           :can-edit="true"
           @reorder="reorderTasks('upcoming', $event)"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
         />
@@ -333,10 +331,10 @@ onBeforeUnmount(() => {
           v-else-if="activeNav === 'completed'"
           :tasks="completedTasks"
           :can-edit="true"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
         />
         <ArchiveView
           v-else-if="activeNav === 'archive'"
@@ -361,9 +359,9 @@ onBeforeUnmount(() => {
           :tasks="todayTasks"
           :selected-task="selectedTask"
           @clear-selection="clearSelectedTask"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
           @delete="requestDeleteTask"
         />
       </div>

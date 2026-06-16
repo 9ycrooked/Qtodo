@@ -1,12 +1,4 @@
-export const getTodayDateValue = () => {
-  const today = new Date();
-
-  return [
-    today.getFullYear(),
-    `${today.getMonth() + 1}`.padStart(2, "0"),
-    `${today.getDate()}`.padStart(2, "0"),
-  ].join("-");
-};
+import { currentDate } from "./currentDate";
 
 export const formatDueText = (dueDate?: string, dueTime?: string) => {
   if (!dueDate && !dueTime) {
@@ -14,7 +6,7 @@ export const formatDueText = (dueDate?: string, dueTime?: string) => {
   }
 
   const dateText = dueDate
-    ? dueDate === getTodayDateValue()
+    ? dueDate === currentDate()
       ? "今天"
       : `${Number(dueDate.slice(5, 7))}月${Number(dueDate.slice(8, 10))}日`
     : "今天";
