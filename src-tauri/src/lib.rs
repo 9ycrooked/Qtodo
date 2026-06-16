@@ -55,6 +55,18 @@ fn delete_task(id: String, db: tauri::State<'_, Arc<Db>>) -> Result<(), String> 
     db.delete_task(id)
 }
 
+/// Persist per-view ordering map for a single task. Only writes the
+/// `view_orders` column — does not touch any other field.
+#[tauri::command]
+fn save_view_orders(
+    id: String,
+    view_orders: serde_json::Value,
+    updated_at: String,
+    db: tauri::State<'_, Arc<Db>>,
+) -> Result<(), String> {
+    db.save_view_orders(id, view_orders, updated_at)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -98,6 +110,7 @@ pub fn run() {
             load_all_tasks,
             save_task,
             delete_task,
+            save_view_orders,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

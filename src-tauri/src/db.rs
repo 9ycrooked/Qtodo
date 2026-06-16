@@ -213,6 +213,25 @@ impl Db {
             .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    /// Persist the per-view ordering map for a single task. Writes only the
+    /// `view_orders` column and `updated_at` — does not touch any other field.
+    pub fn save_view_orders(
+        &self,
+        id: String,
+        view_orders: serde_json::Value,
+        updated_at: String,
+    ) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let json_str = serde_json::to_string(&view_orders)
+            .map_err(|e| format!("序列化 view_orders 失败: {}", e))?;
+        conn.execute(
+            "UPDATE tasks SET view_orders = ?1, updated_at = ?2 WHERE id = ?3",
+            params![json_str, updated_at, id],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 fn create_schema(conn: &Connection) -> SqlResult<()> {
@@ -528,5 +547,66 @@ mod tests {
         let loaded = db.load_all_tasks().expect("load");
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].id, "task-2");
+    }
+
+    // ── save_view_orders tests ──────────────────────────────────────────
+
+    #[test]
+    fn save_view_orders_only_touches_view_orders_column() {
+        let dir = tempdir().expect("tempdir");
+        let db = init(dir.path()).expect("init");
+
+        // Seed a task with known description and priority
+        db.save_task(TodoTask {
+            id: "task-1".to_string(),
+            description: "original".to_string(),
+            priority: "low".to_string(),
+            due_date: "2026-06-16".to_string(),
+            created_at: "2026-06-16T08:00:00Z".to_string(),
+            updated_at: "2026-06-16T08:00:00Z".to_string(),
+            ..make_task("task-1", "original")
+        })
+        .expect("seed");
+
+        // Save view_orders
+        let view_orders = serde_json::json!({"today": 2, "upcoming": 5});
+        db.save_view_orders(
+            "task-1".to_string(),
+            view_orders,
+            "2026-06-16T09:00:00Z".to_string(),
+        )
+        .expect("save_view_orders");
+
+        // Verify: other fields untouched, only view_orders + updated_at changed
+        let loaded = db.load_all_tasks().expect("load");
+        assert_eq!(loaded.len(), 1);
+        assert_eq!(
+            loaded[0].description, "original",
+            "description must not change"
+        );
+        assert_eq!(loaded[0].priority, "low", "priority must not change");
+        assert_eq!(loaded[0].updated_at, "2026-06-16T09:00:00Z");
+        assert_eq!(
+            loaded[0]
+                .view_orders
+                .as_ref()
+                .and_then(|v| v.get("today"))
+                .and_then(|v| v.as_i64()),
+            Some(2)
+        );
+    }
+
+    #[test]
+    fn save_view_orders_roundtrips_json() {
+        let dir = tempdir().expect("tempdir");
+        let db = init(dir.path()).expect("init");
+        db.save_task(make_task("task-1", "x")).expect("seed");
+
+        let original = serde_json::json!({"today": 1, "upcoming": 7, "completed": 3});
+        db.save_view_orders("task-1".to_string(), original.clone(), "t".to_string())
+            .expect("save");
+
+        let loaded = db.load_all_tasks().expect("load");
+        assert_eq!(loaded[0].view_orders, Some(original));
     }
 }
