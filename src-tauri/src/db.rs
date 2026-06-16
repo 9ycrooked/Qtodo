@@ -2,13 +2,6 @@ use rusqlite::{params, Connection, Result as SqlResult};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// Application metadata key-value store row.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
-pub struct AppMeta {
-    pub key: String,
-    pub value: String,
-}
-
 /// Frontend-compatible Task representation. Field names use camelCase via
 /// serde rename so the TypeScript side can consume JSON directly.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

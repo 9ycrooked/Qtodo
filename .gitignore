@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Yarn 4 berry: auto-generated state files (not portable, regenerated on install)
+.yarn/install-state.gz
+.pnp.*
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
