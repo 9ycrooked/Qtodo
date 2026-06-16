@@ -1,6 +1,6 @@
 import { computed, ref } from "vue";
 import type { TodoTask, TodoTaskEditInput, TodoTaskInput, TodoViewKey } from "../types/todo";
-import { getTaskViewCounts, getTasksForView, reorderTasksForView } from "../utils/taskViews";
+import { reorderTasksForView } from "../utils/taskViews";
 
 const initialTasks: TodoTask[] = [
   {
@@ -70,11 +70,6 @@ export const useTasks = () => {
   const selectedTask = computed(
     () => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null,
   );
-  const todayTasks = computed(() => getTasksForView(tasks.value, "today"));
-  const upcomingTasks = computed(() => getTasksForView(tasks.value, "upcoming"));
-  const completedTasks = computed(() => getTasksForView(tasks.value, "completed"));
-  const archivedTasks = computed(() => getTasksForView(tasks.value, "archive"));
-  const navCounts = computed(() => getTaskViewCounts(tasks.value));
 
   const clearSelectedTask = () => {
     selectedTaskId.value = null;
@@ -226,12 +221,7 @@ export const useTasks = () => {
 
   return {
     tasks,
-    todayTasks,
-    upcomingTasks,
-    completedTasks,
-    archivedTasks,
     selectedTask,
-    navCounts,
     addTask,
     archiveTask,
     clearSelectedTask,
