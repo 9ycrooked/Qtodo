@@ -37,6 +37,24 @@ fn set_db_path(
     db.change_path(&target_dir)
 }
 
+/// Load all tasks from the SQLite database.
+#[tauri::command]
+fn load_all_tasks(db: tauri::State<'_, Arc<Db>>) -> Result<Vec<db::TodoTask>, String> {
+    db.load_all_tasks()
+}
+
+/// UPSERT a single task by id.
+#[tauri::command]
+fn save_task(task: db::TodoTask, db: tauri::State<'_, Arc<Db>>) -> Result<(), String> {
+    db.save_task(task)
+}
+
+/// Delete a task by id. No-op if id doesn't exist.
+#[tauri::command]
+fn delete_task(id: String, db: tauri::State<'_, Arc<Db>>) -> Result<(), String> {
+    db.delete_task(id)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -73,7 +91,14 @@ pub fn run() {
             app.manage(app_data_dir);
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![greet, get_db_path, set_db_path])
+        .invoke_handler(tauri::generate_handler![
+            greet,
+            get_db_path,
+            set_db_path,
+            load_all_tasks,
+            save_task,
+            delete_task,
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
