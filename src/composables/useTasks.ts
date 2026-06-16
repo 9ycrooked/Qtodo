@@ -3,6 +3,8 @@ import { invoke } from "@tauri-apps/api/core";
 import type { TodoTask, TodoTaskEditInput, TodoTaskInput, TodoViewKey } from "../types/todo";
 import { reorderTasksForView } from "../utils/taskViews";
 
+const REORDER_WRITE_DEBOUNCE_MS = 200;
+
 /**
  * Module-level singleton promise so that multiple `useTasks()` calls
  * within the same app session only trigger one `load_all_tasks` invoke.
@@ -20,6 +22,39 @@ const ensureLoaded = (tasks: ReturnType<typeof ref<TodoTask[]>>) => {
       });
   }
   return initPromise;
+};
+
+/**
+ * Debounced reorder write state. Each `reorder` transition collects tasks
+ * into the pending map and resets the 200ms timer. When the timer fires
+ * (or `flushPendingWrites()` is called), every pending task's `viewOrders`
+ * is written to SQLite via the dedicated `save_view_orders` command.
+ */
+let pendingViewOrdersWrites: Map<string, TodoTask> = new Map();
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Immediately fire all pending `save_view_orders` invokes and clear the
+ * timer. Safe to call when nothing is pending (no-op). Exposed so that
+ * `App.vue` can call it in `onBeforeUnmount` to avoid losing sort order
+ * on app close.
+ */
+export const flushPendingWrites = () => {
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+  for (const task of pendingViewOrdersWrites.values()) {
+    invoke("save_view_orders", {
+      id: task.id,
+      viewOrders: task.viewOrders ?? {},
+      updatedAt: task.updatedAt,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error("[qtodo] save_view_orders failed:", err);
+    });
+  }
+  pendingViewOrdersWrites.clear();
 };
 
 /**
@@ -217,6 +252,15 @@ export const useTasks = () => {
       case "reorder": {
         const { viewKey, ordered } = event;
         tasks.value = reorderTasksForView(tasks.value, viewKey, ordered, nowIso);
+
+        // Collect each reordered task's latest state into the pending queue
+        for (const task of ordered) {
+          pendingViewOrdersWrites.set(task.id, task);
+        }
+
+        // Reset the debounce timer (200ms after the last call → flush)
+        if (pendingTimer) clearTimeout(pendingTimer);
+        pendingTimer = setTimeout(flushPendingWrites, REORDER_WRITE_DEBOUNCE_MS);
         return;
       }
     }
@@ -236,5 +280,6 @@ export const useTasks = () => {
     clearSelectedTask,
     reorderTasks,
     selectTask,
+    flushPendingWrites,
   };
 };

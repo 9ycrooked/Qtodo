@@ -45,6 +45,7 @@ const {
   transition,
   selectTask,
   clearSelectedTask,
+  flushPendingWrites,
 } = useTasks();
 const isNewTaskDialogOpen = ref(false);
 const isEditTaskDialogOpen = ref(false);
@@ -236,6 +237,7 @@ const onWindowResize = () => {
 window.addEventListener("resize", onWindowResize);
 
 onBeforeUnmount(() => {
+  flushPendingWrites();
   window.removeEventListener("pointermove", onResizeDetailPanelMove);
   window.removeEventListener("pointerup", stopResizeDetailPanel);
   window.removeEventListener("pointercancel", stopResizeDetailPanel);
