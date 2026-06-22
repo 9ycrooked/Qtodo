@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { mount } from "@vue/test-utils";
-import { defineComponent, h } from "vue";
+import { defineComponent } from "vue";
+import type { Update } from "@tauri-apps/plugin-updater";
 import UpdateDialog from "./UpdateDialog.vue";
 
 // Mock @tauri-apps/plugin-updater
@@ -32,14 +33,15 @@ const QmDialogStub = defineComponent({
   },
 });
 
-const makePendingUpdate = (version = "0.2.0", body = "Fixes:\n- Bug A") => ({
-  version,
-  body,
-  date: "2026-06-20T00:00:00Z",
-  download: vi.fn(),
-  downloadAndInstall: vi.fn(),
-  close: vi.fn(),
-});
+const makePendingUpdate = (version = "0.2.0", body = "Fixes:\n- Bug A") =>
+  ({
+    version,
+    body,
+    date: "2026-06-20T00:00:00Z",
+    download: vi.fn(),
+    downloadAndInstall: vi.fn(),
+    close: vi.fn(),
+  }) as unknown as Update;
 
 describe("UpdateDialog", () => {
   beforeEach(() => {
