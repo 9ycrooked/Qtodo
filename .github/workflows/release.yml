@@ -1,0 +1,56 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            args: ''
+
+    runs-on: ${{ matrix.platform }}
+
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: yarn
+
+      - name: Install frontend dependencies
+        run: yarn install --immutable
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build and sign Tauri app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Qtodo ${{ github.ref_name }}'
+          releaseDraft: true
+          releaseBody: |
+            See the assets to download and install this version.
+
+            ## What's Changed
+            - See commit history for details
+          args: ${{ matrix.args }}
