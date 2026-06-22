@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useTheme } from "./composables/useTheme";
+import { useUpdater } from "./composables/useUpdater";
 import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
 import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
 import TodayDetailPanel from "./components/todo/TodayDetailPanel.vue";
+import UpdateDialog from "./components/todo/UpdateDialog.vue";
 import QmIconButton from "./components/ui/QmIconButton.vue";
 import QmTitleBar from "./components/ui/QmTitleBar.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
@@ -15,7 +17,7 @@ import CompletedView from "./views/CompletedView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import TodayTodoView from "./views/TodayTodoView.vue";
 import UpcomingView from "./views/UpcomingView.vue";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 
 type NavItemWithCount = (typeof navItems)[number] & { count?: number };
 
@@ -47,6 +49,28 @@ const {
   clearSelectedTask,
   flushPendingWrites,
 } = useTasks();
+const {
+  updateAvailable,
+  pendingUpdate,
+  runCheck,
+  installUpdate,
+} = useUpdater();
+
+const isUpdateDialogOpen = ref(false);
+const installState = ref<"idle" | "installing" | "error">("idle");
+
+const handleInstallUpdate = async () => {
+  installState.value = "installing";
+  try {
+    await installUpdate();
+  } catch {
+    installState.value = "error";
+  }
+};
+
+const handleLaterUpdate = () => {
+  isUpdateDialogOpen.value = false;
+};
 const isNewTaskDialogOpen = ref(false);
 const isEditTaskDialogOpen = ref(false);
 const isDeleteTaskDialogOpen = ref(false);
@@ -236,6 +260,10 @@ const onWindowResize = () => {
 
 window.addEventListener("resize", onWindowResize);
 
+onMounted(() => {
+  runCheck();
+});
+
 onBeforeUnmount(() => {
   flushPendingWrites();
   window.removeEventListener("pointermove", onResizeDetailPanelMove);
@@ -255,6 +283,9 @@ onBeforeUnmount(() => {
       </template>
 
       <template #actions>
+        <!-- 有更新可用时显示更新按钮 -->
+        <QmIconButton v-if="updateAvailable" class="update-action slow-ripple" icon="system_update" title="有更新可用"
+          @click="isUpdateDialogOpen = true" />
         <!-- 这里显示的是当前主题模式对应的图标。 -->
         <QmIconButton class="theme-mode slow-ripple"
           :icon="themeMode === 'auto' ? 'brightness_auto' : themeMode === 'light' ? 'light_mode' : 'dark_mode'"
@@ -386,6 +417,13 @@ onBeforeUnmount(() => {
       :task-description="taskPendingDelete?.description"
       @confirm="confirmDeleteTask"
     />
+    <UpdateDialog
+      v-model="isUpdateDialogOpen"
+      :pending-update="pendingUpdate"
+      :install-state="installState"
+      @later="handleLaterUpdate"
+      @install="handleInstallUpdate"
+    />
   </div>
 </template>
 
@@ -422,7 +460,21 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
+.app-shell .update-action {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--primary);
+}
+
 .theme-mode :deep(i) {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.update-action :deep(i) {
   font-size: 24px;
   line-height: 1;
 }
