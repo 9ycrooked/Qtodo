@@ -14,13 +14,6 @@ vi.mock("@tauri-apps/plugin-process", () => ({
   relaunch: vi.fn(),
 }));
 
-// Mock @tauri-apps/api/window
-vi.mock("@tauri-apps/api/window", () => ({
-  getCurrentWindow: vi.fn(() => ({
-    close: vi.fn(),
-  })),
-}));
-
 // Stub QmDialog to render slot content directly
 const QmDialogStub = defineComponent({
   name: "QmDialog",
@@ -39,9 +32,17 @@ const makePendingUpdate = (version = "0.2.0", body = "Fixes:\n- Bug A") =>
     body,
     date: "2026-06-20T00:00:00Z",
     download: vi.fn(),
-    downloadAndInstall: vi.fn(),
+    install: vi.fn(),
     close: vi.fn(),
   }) as unknown as Update;
+
+const defaultProps = {
+  pendingUpdate: makePendingUpdate(),
+  downloadState: "idle" as const,
+  downloadedBytes: 0,
+  totalBytes: 0,
+  progressPercent: 0,
+};
 
 describe("UpdateDialog", () => {
   beforeEach(() => {
@@ -52,8 +53,8 @@ describe("UpdateDialog", () => {
     const wrapper = mount(UpdateDialog, {
       props: {
         modelValue: true,
+        ...defaultProps,
         pendingUpdate: makePendingUpdate("0.3.0", "New feature!"),
-        installState: "idle",
       },
       global: {
         stubs: { QmDialog: QmDialogStub },
@@ -64,31 +65,105 @@ describe("UpdateDialog", () => {
     expect(wrapper.text()).toContain("New feature!");
   });
 
-  it("emits install event when install button clicked", async () => {
+  it("shows dismiss button with '稍后' when idle", () => {
     const wrapper = mount(UpdateDialog, {
       props: {
         modelValue: true,
-        pendingUpdate: makePendingUpdate(),
-        installState: "idle",
+        ...defaultProps,
+        downloadState: "idle",
       },
       global: {
         stubs: { QmDialog: QmDialogStub },
       },
     });
 
-    const installBtn = wrapper.findAll("button").find((b) => b.text().includes("立即安装"));
-    expect(installBtn).toBeDefined();
-    await installBtn!.trigger("click");
-
-    expect(wrapper.emitted("install")).toHaveLength(1);
+    const dismissBtn = wrapper.findAll("button").find((b) => b.text().includes("稍后"));
+    expect(dismissBtn).toBeDefined();
   });
 
-  it("emits later event when 稍后 button clicked", async () => {
+  it("shows dismiss button with '后台下载' when downloading", () => {
     const wrapper = mount(UpdateDialog, {
       props: {
         modelValue: true,
-        pendingUpdate: makePendingUpdate(),
-        installState: "idle",
+        ...defaultProps,
+        downloadState: "downloading",
+        downloadedBytes: 500,
+        totalBytes: 1000,
+        progressPercent: 50,
+      },
+      global: {
+        stubs: { QmDialog: QmDialogStub },
+      },
+    });
+
+    const dismissBtn = wrapper.findAll("button").find((b) => b.text().includes("后台下载"));
+    expect(dismissBtn).toBeDefined();
+  });
+
+  it("shows progress bar when downloading with known total", () => {
+    const wrapper = mount(UpdateDialog, {
+      props: {
+        modelValue: true,
+        ...defaultProps,
+        downloadState: "downloading",
+        downloadedBytes: 470,
+        totalBytes: 1000,
+        progressPercent: 47,
+      },
+      global: {
+        stubs: { QmDialog: QmDialogStub },
+      },
+    });
+
+    expect(wrapper.text()).toContain("47%");
+    const fill = wrapper.find(".progress-bar-fill");
+    expect(fill.exists()).toBe(true);
+    expect(fill.attributes("style")).toContain("width: 47%");
+  });
+
+  it("shows indeterminate progress when totalBytes is 0", () => {
+    const wrapper = mount(UpdateDialog, {
+      props: {
+        modelValue: true,
+        ...defaultProps,
+        downloadState: "downloading",
+        downloadedBytes: 0,
+        totalBytes: 0,
+        progressPercent: 0,
+      },
+      global: {
+        stubs: { QmDialog: QmDialogStub },
+      },
+    });
+
+    expect(wrapper.text()).toContain("正在下载更新");
+    const fill = wrapper.find(".progress-bar-fill.indeterminate");
+    expect(fill.exists()).toBe(true);
+  });
+
+  it("shows '立即安装' and download complete message when downloaded", () => {
+    const wrapper = mount(UpdateDialog, {
+      props: {
+        modelValue: true,
+        ...defaultProps,
+        downloadState: "downloaded",
+      },
+      global: {
+        stubs: { QmDialog: QmDialogStub },
+      },
+    });
+
+    expect(wrapper.text()).toContain("下载完成，是否立即安装？");
+    const installBtn = wrapper.findAll("button").find((b) => b.text().includes("立即安装"));
+    expect(installBtn).toBeDefined();
+  });
+
+  it("hides dismiss button when downloaded", () => {
+    const wrapper = mount(UpdateDialog, {
+      props: {
+        modelValue: true,
+        ...defaultProps,
+        downloadState: "downloaded",
       },
       global: {
         stubs: { QmDialog: QmDialogStub },
@@ -96,37 +171,17 @@ describe("UpdateDialog", () => {
     });
 
     const laterBtn = wrapper.findAll("button").find((b) => b.text().includes("稍后"));
-    expect(laterBtn).toBeDefined();
-    await laterBtn!.trigger("click");
-
-    expect(wrapper.emitted("later")).toHaveLength(1);
+    expect(laterBtn).toBeUndefined();
+    const bgBtn = wrapper.findAll("button").find((b) => b.text().includes("后台下载"));
+    expect(bgBtn).toBeUndefined();
   });
 
-  it("disables buttons when installState is installing", () => {
+  it("shows error message when downloadState is error", () => {
     const wrapper = mount(UpdateDialog, {
       props: {
         modelValue: true,
-        pendingUpdate: makePendingUpdate(),
-        installState: "installing",
-      },
-      global: {
-        stubs: { QmDialog: QmDialogStub },
-      },
-    });
-
-    const disabledButtons = wrapper.findAll("button[disabled]");
-    expect(disabledButtons.length).toBe(3);
-
-    const installBtn = wrapper.findAll("button").find((b) => b.text().includes("安装中"));
-    expect(installBtn).toBeDefined();
-  });
-
-  it("shows error message when installState is error", () => {
-    const wrapper = mount(UpdateDialog, {
-      props: {
-        modelValue: true,
-        pendingUpdate: makePendingUpdate(),
-        installState: "error",
+        ...defaultProps,
+        downloadState: "error",
       },
       global: {
         stubs: { QmDialog: QmDialogStub },
@@ -134,5 +189,41 @@ describe("UpdateDialog", () => {
     });
 
     expect(wrapper.text()).toContain("下载失败，请重试。");
+  });
+
+  it("emits dismiss event when dismiss button clicked", async () => {
+    const wrapper = mount(UpdateDialog, {
+      props: {
+        modelValue: true,
+        ...defaultProps,
+        downloadState: "idle",
+      },
+      global: {
+        stubs: { QmDialog: QmDialogStub },
+      },
+    });
+
+    const dismissBtn = wrapper.findAll("button").find((b) => b.text().includes("稍后"));
+    await dismissBtn!.trigger("click");
+
+    expect(wrapper.emitted("dismiss")).toHaveLength(1);
+  });
+
+  it("emits install event when install button clicked", async () => {
+    const wrapper = mount(UpdateDialog, {
+      props: {
+        modelValue: true,
+        ...defaultProps,
+        downloadState: "downloaded",
+      },
+      global: {
+        stubs: { QmDialog: QmDialogStub },
+      },
+    });
+
+    const installBtn = wrapper.findAll("button").find((b) => b.text().includes("立即安装"));
+    await installBtn!.trigger("click");
+
+    expect(wrapper.emitted("install")).toHaveLength(1);
   });
 });

@@ -1,30 +1,34 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { Update } from "@tauri-apps/plugin-updater";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import type { DownloadState } from "../../composables/useUpdater";
 import QmDialog from "../ui/QmDialog.vue";
 
 const model = defineModel<boolean>({ default: false });
 
 const props = defineProps<{
   pendingUpdate: Update | null;
-  installState: "idle" | "installing" | "error";
+  downloadState: DownloadState;
+  downloadedBytes: number;
+  totalBytes: number;
+  progressPercent: number;
 }>();
 
 const emit = defineEmits<{
-  (event: "later"): void;
+  (event: "dismiss"): void;
   (event: "install"): void;
 }>();
 
 const version = computed(() => props.pendingUpdate?.version ?? "");
 const body = computed(() => props.pendingUpdate?.body ?? "");
+const hasTotalBytes = computed(() => props.totalBytes > 0);
 
 const closeDialog = () => {
   model.value = false;
 };
 
-const handleLater = () => {
-  emit("later");
+const handleDismiss = () => {
+  emit("dismiss");
   closeDialog();
 };
 
@@ -32,9 +36,16 @@ const handleInstall = () => {
   emit("install");
 };
 
-const handleExit = () => {
-  getCurrentWindow().close();
-};
+const dismissLabel = computed(() => {
+  if (props.downloadState === "downloading") return "后台下载";
+  return "稍后";
+});
+
+const showInstallButton = computed(() => props.downloadState === "downloaded");
+const showDismissButton = computed(() => props.downloadState !== "downloaded");
+const showProgressBar = computed(() => props.downloadState === "downloading");
+const showDownloadComplete = computed(() => props.downloadState === "downloaded");
+const showError = computed(() => props.downloadState === "error");
 </script>
 
 <template>
@@ -60,37 +71,49 @@ const handleExit = () => {
         <pre class="release-notes-content">{{ body }}</pre>
       </div>
 
-      <p v-if="installState === 'installing'" class="status-text">
-        正在下载并安装更新…
+      <!-- 下载进度条 -->
+      <div v-if="showProgressBar" class="download-progress">
+        <div class="progress-bar" aria-hidden="true">
+          <div
+            class="progress-bar-fill"
+            :style="{ width: hasTotalBytes ? `${progressPercent}%` : '35%' }"
+            :class="{ indeterminate: !hasTotalBytes }"
+          ></div>
+        </div>
+        <p class="progress-text">
+          {{ hasTotalBytes ? `${progressPercent}%` : '正在下载更新…' }}
+        </p>
+      </div>
+
+      <!-- 下载完成提示 -->
+      <p v-if="showDownloadComplete" class="status-text complete">
+        下载完成，是否立即安装？
       </p>
-      <p v-else-if="installState === 'error'" class="status-text error">
+
+      <!-- 下载错误 -->
+      <p v-if="showError" class="status-text error">
         下载失败，请重试。
       </p>
 
       <nav class="right-align no-space dialog-actions">
+        <!-- dismiss 按钮：稍后 / 后台下载 -->
         <button
+          v-if="showDismissButton"
           type="button"
           class="transparent link slow-ripple"
-          :disabled="installState === 'installing'"
-          @click="handleLater"
+          @click="handleDismiss"
         >
-          稍后
+          {{ dismissLabel }}
         </button>
+
+        <!-- 安装按钮：仅 downloaded 时显示 -->
         <button
-          type="button"
-          class="transparent link slow-ripple"
-          :disabled="installState === 'installing'"
-          @click="handleExit"
-        >
-          退出
-        </button>
-        <button
+          v-if="showInstallButton"
           type="button"
           class="fill slow-ripple"
-          :disabled="installState === 'installing'"
           @click="handleInstall"
         >
-          {{ installState === 'installing' ? '安装中…' : '立即安装' }}
+          立即安装
         </button>
       </nav>
     </div>
@@ -152,10 +175,56 @@ const handleExit = () => {
   color: var(--on-surface);
 }
 
+/* 进度条 */
+.download-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.progress-bar {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background-color: var(--surface-container-high);
+  overflow: hidden;
+}
+
+.progress-bar-fill {
+  height: 100%;
+  border-radius: 3px;
+  background-color: var(--primary);
+  transition: width 200ms ease;
+}
+
+.progress-bar-fill.indeterminate {
+  animation: indeterminate 1.5s ease-in-out infinite;
+}
+
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.progress-text {
+  margin: 0;
+  font-size: 13px;
+  color: var(--on-surface-variant);
+}
+
+/* 状态文案 */
 .status-text {
   margin: 0;
   font-size: 13px;
   color: var(--on-surface-variant);
+}
+
+.status-text.complete {
+  color: var(--primary);
 }
 
 .status-text.error {

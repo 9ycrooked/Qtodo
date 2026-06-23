@@ -41,8 +41,26 @@ jobs:
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
 
+      - name: Load release notes
+        id: release_notes
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}"
+          $notesPath = ".github/release-notes/$tag.md"
+          if (-not (Test-Path -LiteralPath $notesPath)) {
+            $notesPath = ".github/release-notes/default.md"
+          }
+          if (-not (Test-Path -LiteralPath $notesPath)) {
+            throw "Release notes file not found for $tag and default.md is missing."
+          }
+
+          $body = Get-Content -LiteralPath $notesPath -Raw
+          "body<<__QTODO_RELEASE_NOTES__" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          $body | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "__QTODO_RELEASE_NOTES__" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
       - name: Build and sign Tauri app
-        uses: tauri-apps/tauri-action@v0
+        uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -51,9 +69,6 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: 'Qtodo ${{ github.ref_name }}'
           releaseDraft: true
-          releaseBody: |
-            See the assets to download and install this version.
-
-            ## What's Changed
-            - See commit history for details
+          releaseBody: ${{ steps.release_notes.outputs.body }}
+          uploadUpdaterJson: true
           args: ${{ matrix.args }}

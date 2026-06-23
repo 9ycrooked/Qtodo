@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { useTheme } from "./composables/useTheme";
+import { useToast } from "./composables/useToast";
 import { useUpdater } from "./composables/useUpdater";
 import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
 import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
@@ -17,7 +18,7 @@ import CompletedView from "./views/CompletedView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import TodayTodoView from "./views/TodayTodoView.vue";
 import UpcomingView from "./views/UpcomingView.vue";
-import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 type NavItemWithCount = (typeof navItems)[number] & { count?: number };
 
@@ -52,24 +53,46 @@ const {
 const {
   updateAvailable,
   pendingUpdate,
+  downloadedBytes,
+  totalBytes,
+  progressPercent,
+  downloadState,
+  checkMessage,
   runCheck,
+  downloadUpdate,
   installUpdate,
 } = useUpdater();
 
-const isUpdateDialogOpen = ref(false);
-const installState = ref<"idle" | "installing" | "error">("idle");
+const { show: showToast } = useToast();
 
-const handleInstallUpdate = async () => {
-  installState.value = "installing";
-  try {
-    await installUpdate();
-  } catch {
-    installState.value = "error";
+const isUpdateDialogOpen = ref(false);
+
+// 手动检查结果 → toast（显示后立即清除，确保下次能触发）
+watch(checkMessage, (msg) => {
+  if (msg) {
+    showToast(msg);
+    checkMessage.value = null;
   }
+});
+
+// 后台下载完成 → 重新弹出 Dialog
+watch(downloadState, (state) => {
+  if (state === "downloaded" && !isUpdateDialogOpen.value) {
+    isUpdateDialogOpen.value = true;
+  }
+});
+
+const handleDismissDialog = () => {
+  isUpdateDialogOpen.value = false;
+  // downloadUpdate 在后台继续运行，不需要额外处理
 };
 
-const handleLaterUpdate = () => {
-  isUpdateDialogOpen.value = false;
+const handleInstallClick = () => {
+  if (downloadState.value === "idle" || downloadState.value === "error") {
+    downloadUpdate();
+  } else if (downloadState.value === "downloaded") {
+    installUpdate();
+  }
 };
 const isNewTaskDialogOpen = ref(false);
 const isEditTaskDialogOpen = ref(false);
@@ -284,7 +307,7 @@ onBeforeUnmount(() => {
 
       <template #actions>
         <!-- 有更新可用时显示更新按钮 -->
-        <QmIconButton v-if="updateAvailable" class="update-action slow-ripple" icon="system_update" title="有更新可用"
+        <QmIconButton v-if="updateAvailable" class="update-action update-badge slow-ripple" icon="system_update" title="有更新可用"
           @click="isUpdateDialogOpen = true" />
         <!-- 这里显示的是当前主题模式对应的图标。 -->
         <QmIconButton class="theme-mode slow-ripple"
@@ -420,9 +443,12 @@ onBeforeUnmount(() => {
     <UpdateDialog
       v-model="isUpdateDialogOpen"
       :pending-update="pendingUpdate"
-      :install-state="installState"
-      @later="handleLaterUpdate"
-      @install="handleInstallUpdate"
+      :download-state="downloadState"
+      :downloaded-bytes="downloadedBytes"
+      :total-bytes="totalBytes"
+      :progress-percent="progressPercent"
+      @dismiss="handleDismissDialog"
+      @install="handleInstallClick"
     />
   </div>
 </template>
@@ -477,6 +503,21 @@ onBeforeUnmount(() => {
 .update-action :deep(i) {
   font-size: 24px;
   line-height: 1;
+}
+
+.update-badge {
+  position: relative;
+}
+
+.update-badge::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--error);
 }
 
 .app-title-bar {

@@ -52,9 +52,9 @@ describe("useUpdater", () => {
     mockCheck.mockResolvedValue({
       available: true,
       version: "0.2.0",
-      notes: "New features",
-      pubDate: new Date("2026-06-22"),
-      downloadAndInstall: vi.fn(),
+      body: "New features",
+      download: vi.fn(),
+      install: vi.fn(),
     } as any);
 
     const { useUpdater } = await import("./useUpdater");
@@ -71,7 +71,7 @@ describe("useUpdater", () => {
     expect(pendingUpdate.value!.version).toBe("0.2.0");
   });
 
-  it("24h cache: second runCheck within 24h skips the network call", async () => {
+  it("24h cache: second auto runCheck within 24h skips the network call", async () => {
     const { check } = await import("@tauri-apps/plugin-updater");
     const mockCheck = vi.mocked(check);
     mockCheck.mockResolvedValue(null as any);
@@ -82,47 +82,139 @@ describe("useUpdater", () => {
     await runCheck();
     expect(mockCheck).toHaveBeenCalledTimes(1);
 
-    // Second call within 24h — should not check again
+    // Second auto call within 24h — should not check again
     await runCheck();
     expect(mockCheck).toHaveBeenCalledTimes(1);
   });
 
-  it("error path: check failure does not set updateAvailable, writes lastFailureAt", async () => {
+  it("manual check bypasses 24h cache", async () => {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const mockCheck = vi.mocked(check);
+    mockCheck.mockResolvedValue(null as any);
+
+    const { useUpdater } = await import("./useUpdater");
+    const { runCheck } = useUpdater();
+
+    await runCheck();
+    expect(mockCheck).toHaveBeenCalledTimes(1);
+
+    // Manual check should bypass cache
+    await runCheck({ manual: true });
+    expect(mockCheck).toHaveBeenCalledTimes(2);
+  });
+
+  it("manual check with no update sets checkMessage", async () => {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const mockCheck = vi.mocked(check);
+    mockCheck.mockResolvedValue(null as any);
+
+    const { useUpdater } = await import("./useUpdater");
+    const { runCheck, checkMessage } = useUpdater();
+
+    await runCheck({ manual: true });
+
+    expect(checkMessage.value).toBe("当前已是最新版本");
+  });
+
+  it("manual check failure sets checkMessage", async () => {
     const { check } = await import("@tauri-apps/plugin-updater");
     const mockCheck = vi.mocked(check);
     mockCheck.mockRejectedValue(new Error("Network error"));
 
     const { useUpdater } = await import("./useUpdater");
-    const { updateAvailable, runCheck } = useUpdater();
+    const { runCheck, checkMessage } = useUpdater();
+
+    await runCheck({ manual: true });
+
+    expect(checkMessage.value).toContain("检查更新失败");
+    expect(checkMessage.value).toContain("Network error");
+  });
+
+  it("auto check failure does not set checkMessage (silent)", async () => {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const mockCheck = vi.mocked(check);
+    mockCheck.mockRejectedValue(new Error("Network error"));
+
+    const { useUpdater } = await import("./useUpdater");
+    const { runCheck, checkMessage } = useUpdater();
 
     await runCheck();
 
-    expect(updateAvailable.value).toBe(false);
-    expect(localStorageMock.setItem).toHaveBeenCalledWith(
-      "qtodo.updater.lastFailureAt",
-      expect.any(String),
-    );
+    expect(checkMessage.value).toBeNull();
   });
 
-  it("installUpdate calls downloadAndInstall then relaunch", async () => {
+  it("downloadUpdate calls download() and sets progress", async () => {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const mockCheck = vi.mocked(check);
+    const mockDownload = vi.fn().mockImplementation(async (callback) => {
+      callback({ event: "Started", data: { contentLength: 1000 } });
+      callback({ event: "Progress", data: { chunkLength: 500 } });
+      callback({ event: "Progress", data: { chunkLength: 500 } });
+    });
+    mockCheck.mockResolvedValue({
+      version: "0.2.0",
+      download: mockDownload,
+      install: vi.fn(),
+    } as any);
+
+    const { useUpdater } = await import("./useUpdater");
+    const { runCheck, downloadUpdate, downloadState, downloadedBytes, totalBytes, progressPercent } =
+      useUpdater();
+
+    await runCheck();
+    expect(downloadState.value).toBe("idle");
+
+    await downloadUpdate();
+
+    expect(mockDownload).toHaveBeenCalledTimes(1);
+    expect(downloadState.value).toBe("downloaded");
+    expect(totalBytes.value).toBe(1000);
+    expect(downloadedBytes.value).toBe(1000);
+    expect(progressPercent.value).toBe(100);
+  });
+
+  it("downloadUpdate error sets downloadState to error", async () => {
+    const { check } = await import("@tauri-apps/plugin-updater");
+    const mockCheck = vi.mocked(check);
+    const mockDownload = vi.fn().mockRejectedValue(new Error("Download failed"));
+    mockCheck.mockResolvedValue({
+      version: "0.2.0",
+      download: mockDownload,
+      install: vi.fn(),
+    } as any);
+
+    const { useUpdater } = await import("./useUpdater");
+    const { runCheck, downloadUpdate, downloadState } = useUpdater();
+
+    await runCheck();
+    await downloadUpdate();
+
+    expect(downloadState.value).toBe("error");
+  });
+
+  it("installUpdate calls install() then relaunch()", async () => {
     const { check } = await import("@tauri-apps/plugin-updater");
     const { relaunch } = await import("@tauri-apps/plugin-process");
-    const mockDownloadAndInstall = vi.fn().mockResolvedValue(undefined);
+    const mockInstall = vi.fn().mockResolvedValue(undefined);
+    const mockDownload = vi.fn().mockResolvedValue(undefined);
     const mockCheck = vi.mocked(check);
     mockCheck.mockResolvedValue({
-      available: true,
       version: "0.2.0",
-      downloadAndInstall: mockDownloadAndInstall,
+      download: mockDownload,
+      install: mockInstall,
     } as any);
     const mockRelaunch = vi.mocked(relaunch);
 
     const { useUpdater } = await import("./useUpdater");
-    const { runCheck, installUpdate } = useUpdater();
+    const { runCheck, downloadUpdate, installUpdate, downloadState } = useUpdater();
 
     await runCheck();
+    await downloadUpdate();
+    expect(downloadState.value).toBe("downloaded");
+
     await installUpdate();
 
-    expect(mockDownloadAndInstall).toHaveBeenCalledTimes(1);
+    expect(mockInstall).toHaveBeenCalledTimes(1);
     expect(mockRelaunch).toHaveBeenCalledTimes(1);
   });
 });
