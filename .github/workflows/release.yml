@@ -70,5 +70,5 @@ jobs:
           releaseName: 'Qtodo ${{ github.ref_name }}'
           releaseDraft: true
           releaseBody: ${{ steps.release_notes.outputs.body }}
-          uploadUpdaterJson: true
+          includeUpdaterJson: true
           args: ${{ matrix.args }}
