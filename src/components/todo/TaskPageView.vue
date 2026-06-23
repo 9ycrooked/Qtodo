@@ -30,6 +30,7 @@ const emit = defineEmits<{
   (event: "edit", id: string): void;
   (event: "delete", id: string): void;
   (event: "archive", id: string): void;
+  (event: "select", id: string): void;
 }>();
 </script>
 
@@ -55,6 +56,7 @@ const emit = defineEmits<{
         @edit="emit('edit', $event)"
         @delete="emit('delete', $event)"
         @archive="emit('archive', $event)"
+        @select="emit('select', $event)"
       />
 
       <div v-else class="page-placeholder">

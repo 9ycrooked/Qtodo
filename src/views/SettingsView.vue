@@ -1,12 +1,17 @@
 <script setup lang="ts">
 import { invoke } from "@tauri-apps/api/core";
+import { getVersion } from "@tauri-apps/api/app";
 import { open } from "@tauri-apps/plugin-dialog";
 import { computed, onMounted, ref } from "vue";
+import { useUpdater } from "../composables/useUpdater";
+
+const { runCheck } = useUpdater();
 
 const dbPath = ref("");
 const copying = ref(false);
 const error = ref("");
 const successMessage = ref("");
+const appVersion = ref("");
 
 const displayPath = computed(() => {
   const path = dbPath.value;
@@ -58,7 +63,10 @@ async function resetPath() {
   }
 }
 
-onMounted(loadPath);
+onMounted(async () => {
+  await loadPath();
+  appVersion.value = await getVersion();
+});
 </script>
 
 <template>
@@ -93,6 +101,20 @@ onMounted(loadPath);
             @click="resetPath"
           >
             重置为默认
+          </button>
+        </div>
+      </div>
+
+      <div class="settings-section">
+        <h4 class="section-title">检查更新</h4>
+        <div class="update-row">
+          <span class="version-label">v{{ appVersion || '…' }}</span>
+          <button
+            type="button"
+            class="slow-ripple"
+            @click="() => runCheck({ manual: true })"
+          >
+            检查更新
           </button>
         </div>
       </div>
@@ -190,5 +212,34 @@ onMounted(loadPath);
 .actions button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+.update-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.version-label {
+  font-size: 14px;
+  color: var(--on-surface-variant);
+}
+
+.update-row button {
+  padding: 8px 20px;
+  border-radius: 20px;
+  border: none;
+  background-color: var(--surface-container-high);
+  color: var(--on-surface);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.update-row button:hover {
+  background-color: var(--primary-container);
+}
+
+.settings-section + .settings-section {
+  margin-top: 16px;
 }
 </style>

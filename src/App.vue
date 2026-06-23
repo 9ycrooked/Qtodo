@@ -1,8 +1,11 @@
 <script setup lang="ts">
 import { useTheme } from "./composables/useTheme";
+import { useToast } from "./composables/useToast";
+import { useUpdater } from "./composables/useUpdater";
 import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
 import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
 import TodayDetailPanel from "./components/todo/TodayDetailPanel.vue";
+import UpdateDialog from "./components/todo/UpdateDialog.vue";
 import QmIconButton from "./components/ui/QmIconButton.vue";
 import QmTitleBar from "./components/ui/QmTitleBar.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
@@ -15,7 +18,7 @@ import CompletedView from "./views/CompletedView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import TodayTodoView from "./views/TodayTodoView.vue";
 import UpcomingView from "./views/UpcomingView.vue";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 type NavItemWithCount = (typeof navItems)[number] & { count?: number };
 
@@ -47,6 +50,50 @@ const {
   clearSelectedTask,
   flushPendingWrites,
 } = useTasks();
+const {
+  updateAvailable,
+  pendingUpdate,
+  downloadedBytes,
+  totalBytes,
+  progressPercent,
+  downloadState,
+  checkMessage,
+  runCheck,
+  downloadUpdate,
+  installUpdate,
+} = useUpdater();
+
+const { show: showToast } = useToast();
+
+const isUpdateDialogOpen = ref(false);
+
+// 手动检查结果 → toast（显示后立即清除，确保下次能触发）
+watch(checkMessage, (msg) => {
+  if (msg) {
+    showToast(msg);
+    checkMessage.value = null;
+  }
+});
+
+// 后台下载完成 → 重新弹出 Dialog
+watch(downloadState, (state) => {
+  if (state === "downloaded" && !isUpdateDialogOpen.value) {
+    isUpdateDialogOpen.value = true;
+  }
+});
+
+const handleDismissDialog = () => {
+  isUpdateDialogOpen.value = false;
+  // downloadUpdate 在后台继续运行，不需要额外处理
+};
+
+const handleInstallClick = () => {
+  if (downloadState.value === "idle" || downloadState.value === "error") {
+    downloadUpdate();
+  } else if (downloadState.value === "downloaded") {
+    installUpdate();
+  }
+};
 const isNewTaskDialogOpen = ref(false);
 const isEditTaskDialogOpen = ref(false);
 const isDeleteTaskDialogOpen = ref(false);
@@ -236,6 +283,10 @@ const onWindowResize = () => {
 
 window.addEventListener("resize", onWindowResize);
 
+onMounted(() => {
+  runCheck();
+});
+
 onBeforeUnmount(() => {
   flushPendingWrites();
   window.removeEventListener("pointermove", onResizeDetailPanelMove);
@@ -255,6 +306,9 @@ onBeforeUnmount(() => {
       </template>
 
       <template #actions>
+        <!-- 有更新可用时显示更新按钮 -->
+        <QmIconButton v-if="updateAvailable" class="update-action update-badge slow-ripple" icon="system_update" title="有更新可用"
+          @click="isUpdateDialogOpen = true" />
         <!-- 这里显示的是当前主题模式对应的图标。 -->
         <QmIconButton class="theme-mode slow-ripple"
           :icon="themeMode === 'auto' ? 'brightness_auto' : themeMode === 'light' ? 'light_mode' : 'dark_mode'"
@@ -386,6 +440,16 @@ onBeforeUnmount(() => {
       :task-description="taskPendingDelete?.description"
       @confirm="confirmDeleteTask"
     />
+    <UpdateDialog
+      v-model="isUpdateDialogOpen"
+      :pending-update="pendingUpdate"
+      :download-state="downloadState"
+      :downloaded-bytes="downloadedBytes"
+      :total-bytes="totalBytes"
+      :progress-percent="progressPercent"
+      @dismiss="handleDismissDialog"
+      @install="handleInstallClick"
+    />
   </div>
 </template>
 
@@ -422,9 +486,38 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
+.app-shell .update-action {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--primary);
+}
+
 .theme-mode :deep(i) {
   font-size: 24px;
   line-height: 1;
+}
+
+.update-action :deep(i) {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.update-badge {
+  position: relative;
+}
+
+.update-badge::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--error);
 }
 
 .app-title-bar {
