@@ -41,7 +41,15 @@ const dismissLabel = computed(() => {
   return "稍后";
 });
 
-const showInstallButton = computed(() => props.downloadState === "downloaded");
+const installLabel = computed(() => {
+  if (props.downloadState === "downloaded") return "立即安装";
+  return "立即更新";
+});
+const showInstallButton = computed(() =>
+  props.downloadState === "idle" ||
+  props.downloadState === "error" ||
+  props.downloadState === "downloaded",
+);
 const showDismissButton = computed(() => props.downloadState !== "downloaded");
 const showProgressBar = computed(() => props.downloadState === "downloading");
 const showDownloadComplete = computed(() => props.downloadState === "downloaded");
@@ -106,14 +114,14 @@ const showError = computed(() => props.downloadState === "error");
           {{ dismissLabel }}
         </button>
 
-        <!-- 安装按钮：仅 downloaded 时显示 -->
+        <!-- 更新/安装按钮：idle/error 时触发下载，downloaded 时触发安装 -->
         <button
           v-if="showInstallButton"
           type="button"
           class="fill slow-ripple"
           @click="handleInstall"
         >
-          立即安装
+          {{ installLabel }}
         </button>
       </nav>
     </div>
