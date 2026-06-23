@@ -6,11 +6,14 @@ const LAST_CHECKED_KEY = "qtodo.updater.lastCheckedAt";
 const LAST_FAILURE_KEY = "qtodo.updater.lastFailureAt";
 const CACHE_DURATION_MS = 24 * 60 * 60 * 1000; // 24 hours
 
-export const useUpdater = () => {
-  const updateAvailable = ref(false);
-  const pendingUpdate = shallowRef<Update | null>(null);
-  const lastCheckedAt = ref<string | null>(null);
+/**
+ * 模块级 ref -- 所有调用 useUpdater() 的组件共享同一个状态
+ */
+const updateAvailable = ref(false);
+const pendingUpdate = shallowRef<Update | null>(null);
+const lastCheckedAt = ref<string | null>(null);
 
+export const useUpdater = () => {
   const runCheck = async (): Promise<void> => {
     // 24h cache: skip if we checked recently
     const cached = localStorage.getItem(LAST_CHECKED_KEY);
@@ -43,16 +46,11 @@ export const useUpdater = () => {
     await relaunch();
   };
 
-  const dismiss = (): void => {
-    // Close the dialog without clearing update state
-  };
-
   return {
     updateAvailable,
     pendingUpdate,
     lastCheckedAt,
     runCheck,
     installUpdate,
-    dismiss,
   };
 };
