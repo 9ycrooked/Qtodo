@@ -84,20 +84,6 @@ export const useTasks = () => {
   // Load tasks from SQLite on first use (module-level singleton guard).
   ensureLoaded(tasks);
 
-  // Verify the backend SQLite storage path on first use. Issue #7 plumbing:
-  // the Tauri command returns the absolute path of qtodo.db so the frontend
-  // can confirm the storage layer is wired up. Result is logged for visibility
-  // but not consumed by the UI.
-  invoke<string>("get_db_path")
-    .then((path) => {
-      // eslint-disable-next-line no-console
-      console.log("[qtodo] db path:", path);
-    })
-    .catch((err) => {
-      // eslint-disable-next-line no-console
-      console.warn("[qtodo] get_db_path failed:", err);
-    });
-
   const selectedTask = computed(
     () => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null,
   );

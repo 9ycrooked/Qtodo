@@ -1,14 +1,10 @@
 use std::sync::Arc;
 use tauri::Manager;
+use tauri_plugin_log::{Target, TargetKind};
 
 mod db;
 
 use db::Db;
-
-#[tauri::command]
-fn greet(name: &str) -> String {
-    format!("Hello, {}! You've been greeted from Rust!", name)
-}
 
 /// Return the absolute path of the application's SQLite database file.
 #[tauri::command]
@@ -74,6 +70,15 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    Target::new(TargetKind::Stdout),
+                    Target::new(TargetKind::LogDir { file_name: None }),
+                    Target::new(TargetKind::Webview),
+                ])
+                .build(),
+        )
         .setup(|app| {
             let app_data_dir = app
                 .path()
@@ -89,14 +94,11 @@ pub fn run() {
                 if custom_path.is_dir() && custom_path.join("qtodo.db").exists() {
                     // Switch to the custom location
                     if let Err(e) = db.change_path(&custom_path) {
-                        eprintln!("Warning: failed to switch to custom db_path '{}': {}", custom_dir, e);
+                        log::warn!("failed to switch to custom db_path '{}': {}", custom_dir, e);
                         // Fall through: continue using default location
                     }
                 } else {
-                    eprintln!(
-                        "Warning: stored db_path '{}' not found, using default",
-                        custom_dir
-                    );
+                    log::warn!("stored db_path '{}' not found, using default", custom_dir);
                 }
             }
 
@@ -106,7 +108,6 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
-            greet,
             get_db_path,
             set_db_path,
             load_all_tasks,
