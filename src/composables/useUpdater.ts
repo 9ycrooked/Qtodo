@@ -18,6 +18,7 @@ const downloadedBytes = ref(0);
 const totalBytes = ref(0);
 const downloadState = ref<DownloadState>("idle");
 const checkMessage = ref<string | null>(null);
+const isChecking = ref(false);
 
 const progressPercent = computed(() => {
   if (!totalBytes.value) return 0;
@@ -46,6 +47,7 @@ export const useUpdater = () => {
     }
 
     try {
+      isChecking.value = true;
       const result = await check();
       localStorage.setItem(LAST_CHECKED_KEY, new Date().toISOString());
       lastCheckedAt.value = new Date().toISOString();
@@ -53,6 +55,9 @@ export const useUpdater = () => {
       if (result) {
         updateAvailable.value = true;
         pendingUpdate.value = markRaw(result);
+        if (manual) {
+          checkMessage.value = "发现新版本";
+        }
       } else if (manual) {
         checkMessage.value = "当前已是最新版本";
       }
@@ -64,6 +69,8 @@ export const useUpdater = () => {
         checkMessage.value = `检查更新失败：${message}`;
       }
       // 自动检查失败：静默
+    } finally {
+      isChecking.value = false;
     }
   };
 
@@ -116,6 +123,7 @@ export const useUpdater = () => {
     progressPercent,
     downloadState,
     checkMessage,
+    isChecking,
     runCheck,
     downloadUpdate,
     installUpdate,

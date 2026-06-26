@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { useTheme } from "./composables/useTheme";
-import { useToast } from "./composables/useToast";
+import { useNotifications } from "./composables/useNotifications";
 import { useUpdater } from "./composables/useUpdater";
 import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
 import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
@@ -8,6 +8,7 @@ import TodayDetailPanel from "./components/todo/TodayDetailPanel.vue";
 import UpdateDialog from "./components/todo/UpdateDialog.vue";
 import QmIconButton from "./components/ui/QmIconButton.vue";
 import QmTitleBar from "./components/ui/QmTitleBar.vue";
+import QmToastViewport from "./components/ui/QmToastViewport.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
 import { useTasks } from "./composables/useTasks";
 import type { TodoTask, TodoTaskInput } from "./types/todo";
@@ -63,14 +64,15 @@ const {
   installUpdate,
 } = useUpdater();
 
-const { show: showToast } = useToast();
+const notifications = useNotifications();
 
 const isUpdateDialogOpen = ref(false);
 
-// 手动检查结果 → toast（显示后立即清除，确保下次能触发）
+// 手动检查结果 → toast
 watch(checkMessage, (msg) => {
   if (msg) {
-    showToast(msg);
+    const type = msg.includes("失败") ? "error" : msg.includes("新版本") ? "success" : "info";
+    notifications[type](msg);
     checkMessage.value = null;
   }
 });
@@ -161,9 +163,10 @@ const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value;
 };
 
-const selectNavItem = (key: NavItemKey) => {
+const selectNavItem = (key: NavItemKey, event?: MouseEvent) => {
   if (key === "add") {
     isNewTaskDialogOpen.value = true;
+    (event?.currentTarget as HTMLElement)?.blur();
     return;
   }
 
@@ -307,7 +310,7 @@ onBeforeUnmount(() => {
 
       <template #actions>
         <!-- 有更新可用时显示更新按钮 -->
-        <QmIconButton v-if="updateAvailable" class="update-action update-badge slow-ripple" icon="system_update" title="有更新可用"
+        <QmIconButton v-if="updateAvailable" class="update-action update-badge slow-ripple" icon="upgrade" title="有更新可用"
           @click="isUpdateDialogOpen = true" />
         <!-- 这里显示的是当前主题模式对应的图标。 -->
         <QmIconButton class="theme-mode slow-ripple"
@@ -348,11 +351,11 @@ onBeforeUnmount(() => {
             <!-- 收起态使用真正的 icon-only 组件，避免 BeerCSS medium 文字按钮撑开窄栏。 -->
             <QmIconButton v-if="sidebarCollapsed" class="sidebar-icon-action slow-ripple"
               :class="{ archive: activeNav === item.key }" :icon="item.icon" :active="activeNav === item.key"
-              :aria-label="item.label" :title="item.label" @click="selectNavItem(item.key)" />
+              :aria-label="item.label" :title="item.label" @click="selectNavItem(item.key, $event)" />
 
             <!-- 展开态保留完整按钮，显示 icon、文字和 badge。 -->
             <button v-else type="button" :class="['no-round slow-ripple', activeNav === item.key && 'archive', 'medium']"
-              @click="selectNavItem(item.key)">
+              @click="selectNavItem(item.key, $event)">
               <i>{{ item.icon }}</i>
               <span class="nav-label">{{ item.label }}</span>
               <span v-if="item.count !== undefined" class="badge none">{{ item.count }}</span>
@@ -449,6 +452,12 @@ onBeforeUnmount(() => {
       :progress-percent="progressPercent"
       @dismiss="handleDismissDialog"
       @install="handleInstallClick"
+    />
+    <QmToastViewport
+      :toasts="notifications.toasts.value"
+      @close="notifications.remove"
+      @pause="notifications.pause"
+      @resume="notifications.resume"
     />
   </div>
 </template>

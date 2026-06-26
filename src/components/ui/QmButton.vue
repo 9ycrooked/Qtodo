@@ -131,16 +131,23 @@ const beercssClass = computed(() => {
 
     <button :class="[beercssClass, 'slow-ripple', isInactive && 'disabled']" :disabled="isInactive" :type="type" @click="onClick"
         v-bind="$attrs">
-        <i v-if="loading">progress_activity</i>
+        <i v-if="loading" class="spin-icon">progress_activity</i>
         <img v-else-if="image" class="responsive" :src="image" alt="" />
-        <template v-else>
-            <i v-if="icon">{{ icon }}</i>
-            <span v-if="$slots.default">
-                <slot />
-            </span>
-        </template>
+        <i v-else-if="icon">{{ icon }}</i>
+        <span v-if="$slots.default">
+            <slot />
+        </span>
     </button>
 
 </template>
 
-<style></style>
+<style>
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.spin-icon {
+  animation: spin 800ms linear infinite;
+}
+</style>
