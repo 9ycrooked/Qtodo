@@ -1,61 +1,92 @@
 import { computed, ref } from "vue";
+import { invoke } from "@tauri-apps/api/core";
 import type { TodoTask, TodoTaskEditInput, TodoTaskInput, TodoViewKey } from "../types/todo";
-import { getTaskViewCounts, getTasksForView, reorderTasksForView } from "../utils/taskViews";
+import { reorderTasksForView } from "../utils/taskViews";
 
-const initialTasks: TodoTask[] = [
-  {
-    id: "task-1",
-    title: "界面设计",
-    description: "在 Illustrator 中设计 BeerCSS 待办看板",
-    dueDate: "2026-06-14",
-    dueTime: "15:00",
-    completed: false,
-    archived: false,
-    priority: "high",
-    createdAt: "2026-06-14T08:00:00.000Z",
-    updatedAt: "2026-06-14T08:00:00.000Z",
-  },
-  {
-    id: "task-2",
-    title: "整理 QTodo 首页任务列表组件",
-    description: "组件封装",
-    dueDate: "2026-06-14",
-    dueTime: "18:00",
-    completed: true,
-    archived: false,
-    priority: "medium",
-    createdAt: "2026-06-14T09:00:00.000Z",
-    updatedAt: "2026-06-14T10:00:00.000Z",
-    completedAt: "2026-06-14T10:00:00.000Z",
-  },
-  {
-    id: "task-3",
-    title: "检查深色主题下的任务条可读性",
-    description: "视觉检查",
-    dueDate: "2026-06-14",
-    completed: true,
-    archived: true,
-    priority: "low",
-    createdAt: "2026-06-14T09:30:00.000Z",
-    updatedAt: "2026-06-14T11:00:00.000Z",
-    completedAt: "2026-06-14T10:30:00.000Z",
-    archivedAt: "2026-06-14T11:00:00.000Z",
-  },
-];
+const REORDER_WRITE_DEBOUNCE_MS = 200;
+
+/**
+ * Module-level singleton promise so that multiple `useTasks()` calls
+ * within the same app session only trigger one `load_all_tasks` invoke.
+ */
+let initPromise: Promise<void> | null = null;
+const ensureLoaded = (tasks: ReturnType<typeof ref<TodoTask[]>>) => {
+  if (!initPromise) {
+    initPromise = invoke<TodoTask[]>("load_all_tasks")
+      .then((loaded) => {
+        tasks.value = loaded;
+      })
+      .catch((err) => {
+        // eslint-disable-next-line no-console
+        console.error("[qtodo] load_all_tasks failed:", err);
+      });
+  }
+  return initPromise;
+};
+
+/**
+ * Debounced reorder write state. Each `reorder` transition collects tasks
+ * into the pending map and resets the 200ms timer. When the timer fires
+ * (or `flushPendingWrites()` is called), every pending task's `viewOrders`
+ * is written to SQLite via the dedicated `save_view_orders` command.
+ */
+let pendingViewOrdersWrites: Map<string, TodoTask> = new Map();
+let pendingTimer: ReturnType<typeof setTimeout> | null = null;
+
+/**
+ * Immediately fire all pending `save_view_orders` invokes and clear the
+ * timer. Safe to call when nothing is pending (no-op). Exposed so that
+ * `App.vue` can call it in `onBeforeUnmount` to avoid losing sort order
+ * on app close.
+ */
+export const flushPendingWrites = () => {
+  if (pendingTimer) {
+    clearTimeout(pendingTimer);
+    pendingTimer = null;
+  }
+  for (const task of pendingViewOrdersWrites.values()) {
+    invoke("save_view_orders", {
+      id: task.id,
+      viewOrders: task.viewOrders ?? {},
+      updatedAt: task.updatedAt,
+    }).catch((err) => {
+      // eslint-disable-next-line no-console
+      console.error("[qtodo] save_view_orders failed:", err);
+    });
+  }
+  pendingViewOrdersWrites.clear();
+};
+
+/**
+ * Lifecycle transition events.
+ * Single source of truth for all task state mutations. Every public mutation
+ * (addTask / updateTask / archiveTask / deleteTask / toggleTaskComplete) and
+ * the private reorder path funnel through `transition()` so that invariants
+ * (e.g. ADR-0001 "archive only from complete") live in one place.
+ */
+type TransitionEvent =
+  | { type: "create"; payload: TodoTaskInput }
+  | { type: "update"; payload: TodoTaskEditInput }
+  | { type: "archive"; id: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle-complete"; id: string; completed: boolean }
+  | {
+      type: "reorder";
+      viewKey: Extract<TodoViewKey, "today" | "upcoming">;
+      ordered: TodoTask[];
+    };
 
 export const useTasks = () => {
-  const tasks = ref<TodoTask[]>([...initialTasks]);
+  const tasks = ref<TodoTask[]>([]);
   const selectedTaskId = ref<string | null>(null);
-  const nextTaskId = ref(initialTasks.length + 1);
+  const nextTaskId = ref(1);
+
+  // Load tasks from SQLite on first use (module-level singleton guard).
+  ensureLoaded(tasks);
 
   const selectedTask = computed(
     () => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null,
   );
-  const todayTasks = computed(() => getTasksForView(tasks.value, "today"));
-  const upcomingTasks = computed(() => getTasksForView(tasks.value, "upcoming"));
-  const completedTasks = computed(() => getTasksForView(tasks.value, "completed"));
-  const archivedTasks = computed(() => getTasksForView(tasks.value, "archive"));
-  const navCounts = computed(() => getTaskViewCounts(tasks.value));
 
   const clearSelectedTask = () => {
     selectedTaskId.value = null;
@@ -65,120 +96,176 @@ export const useTasks = () => {
     selectedTaskId.value = id;
   };
 
+  /**
+   * Single seam for all task lifecycle mutations. Encodes the state-machine
+   * invariants once (see ADR-0001: archive only from complete; no mutation of
+   * archived tasks; updatedAt refreshed on every write).
+   *
+   * Public mutation functions (addTask / updateTask / archiveTask / deleteTask
+   * / toggleTaskComplete) are thin delegates that route through this function
+   * so the rules live in one place. #5 will fold the public surface into a
+   * single `transition(event)` export; for #1 we keep the existing public API
+   * intact and only consolidate the *implementation*.
+   */
+  const transition = (event: TransitionEvent): void => {
+    const nowIso = new Date().toISOString();
+
+    switch (event.type) {
+      case "toggle-complete": {
+        const { id, completed } = event;
+        tasks.value = tasks.value.map((task) => {
+          if (task.id !== id || task.archived) {
+            return task;
+          }
+          return {
+            ...task,
+            completed,
+            completedAt: completed ? nowIso : undefined,
+            updatedAt: nowIso,
+          };
+        });
+        // Fire-and-forget: persist toggled state to SQLite
+        const toggled = tasks.value.find((t) => t.id === id);
+        if (toggled) {
+          invoke("save_task", { task: toggled }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[qtodo] save_task (toggle) failed:", err);
+          });
+        }
+        return;
+      }
+
+      case "create": {
+        const { payload } = event;
+        const id = `task-${Date.now()}-${nextTaskId.value}`;
+        nextTaskId.value += 1;
+
+        const task: TodoTask = {
+          id,
+          title: payload.title,
+          description: payload.description,
+          dueDate: payload.dueDate,
+          dueTime: payload.dueTime,
+          completed: false,
+          archived: false,
+          priority: payload.priority,
+          createdAt: nowIso,
+          updatedAt: nowIso,
+          viewOrders: {},
+        };
+
+        tasks.value = [task, ...tasks.value];
+        selectedTaskId.value = id;
+        // Fire-and-forget: persist new task to SQLite
+        invoke("save_task", { task }).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("[qtodo] save_task (create) failed:", err);
+        });
+        return;
+      }
+
+      case "delete": {
+        const { id } = event;
+        tasks.value = tasks.value.filter((task) => task.id !== id);
+        if (selectedTaskId.value === id) {
+          clearSelectedTask();
+        }
+        // Fire-and-forget: delete from SQLite
+        invoke("delete_task", { id }).catch((err) => {
+          // eslint-disable-next-line no-console
+          console.error("[qtodo] delete_task failed:", err);
+        });
+        return;
+      }
+
+      case "archive": {
+        const { id } = event;
+        tasks.value = tasks.value.map((task) => {
+          // ADR-0001: only Complete sub-state can be Archived.
+          if (task.id !== id || !task.completed || task.archived) {
+            return task;
+          }
+          return {
+            ...task,
+            archived: true,
+            archivedAt: nowIso,
+            updatedAt: nowIso,
+          };
+        });
+
+        if (selectedTaskId.value === id) {
+          clearSelectedTask();
+        }
+        // Fire-and-forget: persist archived state to SQLite
+        const archived = tasks.value.find((t) => t.id === id);
+        if (archived) {
+          invoke("save_task", { task: archived }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[qtodo] save_task (archive) failed:", err);
+          });
+        }
+        return;
+      }
+
+      case "update": {
+        const { payload } = event;
+        tasks.value = tasks.value.map((task) => {
+          if (task.id !== payload.id) {
+            return task;
+          }
+          return {
+            ...task,
+            title: payload.title,
+            description: payload.description,
+            dueDate: payload.dueDate,
+            dueTime: payload.dueTime,
+            priority: payload.priority,
+            updatedAt: nowIso,
+            viewOrders: task.viewOrders,
+          };
+        });
+        // Fire-and-forget: persist updated task to SQLite
+        const updated = tasks.value.find((t) => t.id === payload.id);
+        if (updated) {
+          invoke("save_task", { task: updated }).catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error("[qtodo] save_task (update) failed:", err);
+          });
+        }
+        return;
+      }
+
+      case "reorder": {
+        const { viewKey, ordered } = event;
+        tasks.value = reorderTasksForView(tasks.value, viewKey, ordered, nowIso);
+
+        // Collect each reordered task's latest state into the pending queue
+        for (const task of ordered) {
+          pendingViewOrdersWrites.set(task.id, task);
+        }
+
+        // Reset the debounce timer (200ms after the last call → flush)
+        if (pendingTimer) clearTimeout(pendingTimer);
+        pendingTimer = setTimeout(flushPendingWrites, REORDER_WRITE_DEBOUNCE_MS);
+        return;
+      }
+    }
+  };
+
   const reorderTasks = (
     viewKey: Extract<TodoViewKey, "today" | "upcoming">,
     orderedViewTasks: TodoTask[],
   ) => {
-    tasks.value = reorderTasksForView(tasks.value, viewKey, orderedViewTasks, new Date().toISOString());
-  };
-
-  const toggleTaskComplete = (id: string, completed: boolean) => {
-    const nowIso = new Date().toISOString();
-
-    tasks.value = tasks.value.map((task) => {
-      if (task.id !== id || task.archived) {
-        return task;
-      }
-
-      return {
-        ...task,
-        completed,
-        completedAt: completed ? nowIso : undefined,
-        updatedAt: nowIso,
-      };
-    });
-  };
-
-  const addTask = (input: TodoTaskInput) => {
-    const nowIso = new Date().toISOString();
-    const id = `task-${Date.now()}-${nextTaskId.value}`;
-    nextTaskId.value += 1;
-
-    const task: TodoTask = {
-      id,
-      title: input.title,
-      description: input.description,
-      dueDate: input.dueDate,
-      dueTime: input.dueTime,
-      completed: false,
-      archived: false,
-      priority: input.priority,
-      createdAt: nowIso,
-      updatedAt: nowIso,
-      viewOrders: {},
-    };
-
-    tasks.value = [task, ...tasks.value];
-    selectedTaskId.value = id;
-  };
-
-  const deleteTask = (id: string) => {
-    tasks.value = tasks.value.filter((task) => task.id !== id);
-
-    if (selectedTaskId.value === id) {
-      clearSelectedTask();
-    }
-  };
-
-  const archiveTask = (id: string) => {
-    const nowIso = new Date().toISOString();
-
-    tasks.value = tasks.value.map((task) => {
-      if (task.id !== id || !task.completed || task.archived) {
-        return task;
-      }
-
-      return {
-        ...task,
-        archived: true,
-        archivedAt: nowIso,
-        updatedAt: nowIso,
-      };
-    });
-
-    if (selectedTaskId.value === id) {
-      clearSelectedTask();
-    }
-  };
-
-  const updateTask = (input: TodoTaskEditInput) => {
-    const nowIso = new Date().toISOString();
-
-    tasks.value = tasks.value.map((task) => {
-      if (task.id !== input.id) {
-        return task;
-      }
-
-      const nextTask: TodoTask = {
-        ...task,
-        title: input.title,
-        description: input.description,
-        dueDate: input.dueDate,
-        dueTime: input.dueTime,
-        priority: input.priority,
-        updatedAt: nowIso,
-        viewOrders: task.viewOrders,
-      };
-
-      return nextTask;
-    });
+    transition({ type: "reorder", viewKey, ordered: orderedViewTasks });
   };
 
   return {
     tasks,
-    todayTasks,
-    upcomingTasks,
-    completedTasks,
-    archivedTasks,
     selectedTask,
-    navCounts,
-    addTask,
-    archiveTask,
+    transition,
     clearSelectedTask,
-    deleteTask,
     reorderTasks,
     selectTask,
-    updateTask,
-    toggleTaskComplete,
+    flushPendingWrites,
   };
 };

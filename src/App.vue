@@ -1,20 +1,25 @@
 <script setup lang="ts">
 import { useTheme } from "./composables/useTheme";
+import { useNotifications } from "./composables/useNotifications";
+import { useUpdater } from "./composables/useUpdater";
 import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
 import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
 import TodayDetailPanel from "./components/todo/TodayDetailPanel.vue";
+import UpdateDialog from "./components/todo/UpdateDialog.vue";
 import QmIconButton from "./components/ui/QmIconButton.vue";
 import QmTitleBar from "./components/ui/QmTitleBar.vue";
+import QmToastViewport from "./components/ui/QmToastViewport.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
 import { useTasks } from "./composables/useTasks";
 import type { TodoTask, TodoTaskInput } from "./types/todo";
-import { getTodayDateValue } from "./utils/formatDueText";
+import { currentDate } from "./utils/currentDate";
+import { getTaskViewCounts, getTasksForView } from "./utils/taskViews";
 import ArchiveView from "./views/ArchiveView.vue";
 import CompletedView from "./views/CompletedView.vue";
 import SettingsView from "./views/SettingsView.vue";
 import TodayTodoView from "./views/TodayTodoView.vue";
 import UpcomingView from "./views/UpcomingView.vue";
-import { computed, onBeforeUnmount, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 
 type NavItemWithCount = (typeof navItems)[number] & { count?: number };
 
@@ -39,21 +44,58 @@ const sidebarCollapsed = ref(false);
 const { cycleMode, themeMode } = useTheme();
 const {
   tasks,
-  todayTasks,
-  upcomingTasks,
-  completedTasks,
-  archivedTasks,
   selectedTask,
-  navCounts,
   reorderTasks,
-  toggleTaskComplete,
+  transition,
   selectTask,
   clearSelectedTask,
-  addTask,
-  updateTask,
-  deleteTask,
-  archiveTask,
+  flushPendingWrites,
 } = useTasks();
+const {
+  updateAvailable,
+  pendingUpdate,
+  downloadedBytes,
+  totalBytes,
+  progressPercent,
+  downloadState,
+  checkMessage,
+  runCheck,
+  downloadUpdate,
+  installUpdate,
+} = useUpdater();
+
+const notifications = useNotifications();
+
+const isUpdateDialogOpen = ref(false);
+
+// 手动检查结果 → toast
+watch(checkMessage, (msg) => {
+  if (msg) {
+    const type = msg.includes("失败") ? "error" : msg.includes("新版本") ? "success" : "info";
+    notifications[type](msg);
+    checkMessage.value = null;
+  }
+});
+
+// 后台下载完成 → 重新弹出 Dialog
+watch(downloadState, (state) => {
+  if (state === "downloaded" && !isUpdateDialogOpen.value) {
+    isUpdateDialogOpen.value = true;
+  }
+});
+
+const handleDismissDialog = () => {
+  isUpdateDialogOpen.value = false;
+  // downloadUpdate 在后台继续运行，不需要额外处理
+};
+
+const handleInstallClick = () => {
+  if (downloadState.value === "idle" || downloadState.value === "error") {
+    downloadUpdate();
+  } else if (downloadState.value === "downloaded") {
+    installUpdate();
+  }
+};
 const isNewTaskDialogOpen = ref(false);
 const isEditTaskDialogOpen = ref(false);
 const isDeleteTaskDialogOpen = ref(false);
@@ -61,6 +103,11 @@ const taskPendingEdit = ref<TodoTask | null>(null);
 const taskIdPendingDelete = ref<string | null>(null);
 const detailPanelWidth = ref(DEFAULT_DETAIL_PANEL_WIDTH);
 const showDetailPanel = computed(() => activeNav.value === "today-todo");
+const todayTasks = computed(() => getTasksForView(tasks.value, "today"));
+const upcomingTasks = computed(() => getTasksForView(tasks.value, "upcoming"));
+const completedTasks = computed(() => getTasksForView(tasks.value, "completed"));
+const archivedTasks = computed(() => getTasksForView(tasks.value, "archive"));
+const navCounts = computed(() => getTaskViewCounts(tasks.value));
 const navItemsWithCounts = computed<NavItemWithCount[]>(() =>
   navItems.map((item) => {
     if (item.key === "today-todo") {
@@ -84,9 +131,7 @@ const navItemsWithCounts = computed<NavItemWithCount[]>(() =>
 );
 const taskPendingDelete = computed(() =>
   taskIdPendingDelete.value
-    ? todayTasks.value
-        .concat(upcomingTasks.value, completedTasks.value, archivedTasks.value)
-        .find((task) => task.id === taskIdPendingDelete.value)
+    ? tasks.value.find((task) => task.id === taskIdPendingDelete.value) ?? null
     : null,
 );
 const isResizingDetailPanel = ref(false);
@@ -118,9 +163,10 @@ const toggleSidebar = () => {
   sidebarCollapsed.value = !sidebarCollapsed.value;
 };
 
-const selectNavItem = (key: NavItemKey) => {
+const selectNavItem = (key: NavItemKey, event?: MouseEvent) => {
   if (key === "add") {
     isNewTaskDialogOpen.value = true;
+    (event?.currentTarget as HTMLElement)?.blur();
     return;
   }
 
@@ -128,7 +174,7 @@ const selectNavItem = (key: NavItemKey) => {
 };
 
 const createTodayTask = (input: TodoTaskInput) => {
-  addTask(input);
+  transition({ type: "create", payload: input });
   activeNav.value = "today-todo";
 };
 
@@ -149,9 +195,12 @@ const updateTaskFromDialog = (input: TodoTaskInput) => {
   const editingTaskId = taskPendingEdit.value.id;
   const wasSelectedTodayTask = selectedTask.value?.id === editingTaskId;
   const wasTodayPage = activeNav.value === "today-todo";
-  updateTask({
-    id: editingTaskId,
-    ...input,
+  transition({
+    type: "update",
+    payload: {
+      id: editingTaskId,
+      ...input,
+    },
   });
 
   const nextTask = tasks.value.find((task) => task.id === editingTaskId) ?? null;
@@ -168,7 +217,7 @@ const updateTaskFromDialog = (input: TodoTaskInput) => {
     // Today 视图规则（见 taskViews.ts）：today-due、unarchived 的任务都留在 today，
     // 包括已完成的。所以判断"是否仍属于 today"只需看 dueDate + archived，
     // 不需要排除 completed 任务。
-    const staysInToday = nextTask.dueDate === getTodayDateValue() && !nextTask.archived;
+    const staysInToday = nextTask.dueDate === currentDate() && !nextTask.archived;
 
     if (wasTodayPage && staysInToday) {
       selectTask(editingTaskId);
@@ -188,7 +237,7 @@ const confirmDeleteTask = () => {
     return;
   }
 
-  deleteTask(taskIdPendingDelete.value);
+  transition({ type: "delete", id: taskIdPendingDelete.value });
   taskIdPendingDelete.value = null;
 };
 
@@ -237,7 +286,12 @@ const onWindowResize = () => {
 
 window.addEventListener("resize", onWindowResize);
 
+onMounted(() => {
+  runCheck();
+});
+
 onBeforeUnmount(() => {
+  flushPendingWrites();
   window.removeEventListener("pointermove", onResizeDetailPanelMove);
   window.removeEventListener("pointerup", stopResizeDetailPanel);
   window.removeEventListener("pointercancel", stopResizeDetailPanel);
@@ -255,6 +309,9 @@ onBeforeUnmount(() => {
       </template>
 
       <template #actions>
+        <!-- 有更新可用时显示更新按钮 -->
+        <QmIconButton v-if="updateAvailable" class="update-action update-badge slow-ripple" icon="upgrade" title="有更新可用"
+          @click="isUpdateDialogOpen = true" />
         <!-- 这里显示的是当前主题模式对应的图标。 -->
         <QmIconButton class="theme-mode slow-ripple"
           :icon="themeMode === 'auto' ? 'brightness_auto' : themeMode === 'light' ? 'light_mode' : 'dark_mode'"
@@ -294,11 +351,11 @@ onBeforeUnmount(() => {
             <!-- 收起态使用真正的 icon-only 组件，避免 BeerCSS medium 文字按钮撑开窄栏。 -->
             <QmIconButton v-if="sidebarCollapsed" class="sidebar-icon-action slow-ripple"
               :class="{ archive: activeNav === item.key }" :icon="item.icon" :active="activeNav === item.key"
-              :aria-label="item.label" :title="item.label" @click="selectNavItem(item.key)" />
+              :aria-label="item.label" :title="item.label" @click="selectNavItem(item.key, $event)" />
 
             <!-- 展开态保留完整按钮，显示 icon、文字和 badge。 -->
             <button v-else type="button" :class="['no-round slow-ripple', activeNav === item.key && 'archive', 'medium']"
-              @click="selectNavItem(item.key)">
+              @click="selectNavItem(item.key, $event)">
               <i>{{ item.icon }}</i>
               <span class="nav-label">{{ item.label }}</span>
               <span v-if="item.count !== undefined" class="badge none">{{ item.count }}</span>
@@ -313,19 +370,19 @@ onBeforeUnmount(() => {
           :tasks="todayTasks"
           :can-edit="true"
           @reorder="reorderTasks('today', $event)"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @select="selectTask"
           @clear-selection="clearSelectedTask"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
         />
         <UpcomingView
           v-else-if="activeNav === 'upcoming'"
           :tasks="upcomingTasks"
           :can-edit="true"
           @reorder="reorderTasks('upcoming', $event)"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
         />
@@ -333,10 +390,10 @@ onBeforeUnmount(() => {
           v-else-if="activeNav === 'completed'"
           :tasks="completedTasks"
           :can-edit="true"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
           @delete="requestDeleteTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
         />
         <ArchiveView
           v-else-if="activeNav === 'archive'"
@@ -361,9 +418,9 @@ onBeforeUnmount(() => {
           :tasks="todayTasks"
           :selected-task="selectedTask"
           @clear-selection="clearSelectedTask"
-          @toggle-complete="toggleTaskComplete"
+          @toggle-complete="(id, completed) => transition({ type: 'toggle-complete', id, completed })"
           @edit="requestEditTask"
-          @archive="archiveTask"
+          @archive="(id) => transition({ type: 'archive', id })"
           @delete="requestDeleteTask"
         />
       </div>
@@ -385,6 +442,22 @@ onBeforeUnmount(() => {
       v-model="isDeleteTaskDialogOpen"
       :task-description="taskPendingDelete?.description"
       @confirm="confirmDeleteTask"
+    />
+    <UpdateDialog
+      v-model="isUpdateDialogOpen"
+      :pending-update="pendingUpdate"
+      :download-state="downloadState"
+      :downloaded-bytes="downloadedBytes"
+      :total-bytes="totalBytes"
+      :progress-percent="progressPercent"
+      @dismiss="handleDismissDialog"
+      @install="handleInstallClick"
+    />
+    <QmToastViewport
+      :toasts="notifications.toasts.value"
+      @close="notifications.remove"
+      @pause="notifications.pause"
+      @resume="notifications.resume"
     />
   </div>
 </template>
@@ -422,9 +495,38 @@ onBeforeUnmount(() => {
   padding: 0;
 }
 
+.app-shell .update-action {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  color: var(--primary);
+}
+
 .theme-mode :deep(i) {
   font-size: 24px;
   line-height: 1;
+}
+
+.update-action :deep(i) {
+  font-size: 24px;
+  line-height: 1;
+}
+
+.update-badge {
+  position: relative;
+}
+
+.update-badge::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background-color: var(--error);
 }
 
 .app-title-bar {

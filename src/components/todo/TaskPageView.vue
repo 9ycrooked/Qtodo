@@ -30,6 +30,7 @@ const emit = defineEmits<{
   (event: "edit", id: string): void;
   (event: "delete", id: string): void;
   (event: "archive", id: string): void;
+  (event: "select", id: string): void;
 }>();
 </script>
 
@@ -37,6 +38,7 @@ const emit = defineEmits<{
   <section class="page-view" :aria-labelledby="titleId">
     <header class="page-header">
       <h3 :id="titleId" class="page-name small">{{ title }}</h3>
+      <slot name="header" />
       <span class="current-count">共 {{ tasks.length }} 个</span>
     </header>
 
@@ -54,6 +56,7 @@ const emit = defineEmits<{
         @edit="emit('edit', $event)"
         @delete="emit('delete', $event)"
         @archive="emit('archive', $event)"
+        @select="emit('select', $event)"
       />
 
       <div v-else class="page-placeholder">
