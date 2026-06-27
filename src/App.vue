@@ -12,6 +12,7 @@ import QmTitleBar from "./components/ui/QmTitleBar.vue";
 import QmToastViewport from "./components/ui/QmToastViewport.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
 import { useTasks } from "./composables/useTasks";
+import { useTaskReminders } from "./composables/useTaskReminders";
 import type { TodoTask, TodoTaskInput } from "./types/todo";
 import { currentDate } from "./utils/currentDate";
 import { getTaskViewCounts, getTasksForView } from "./utils/taskViews";
@@ -52,6 +53,8 @@ const {
   clearSelectedTask,
   flushPendingWrites,
 } = useTasks();
+const { start: startReminders } = useTaskReminders(tasks);
+
 const {
   updateAvailable,
   pendingUpdate,
@@ -304,6 +307,7 @@ window.addEventListener("resize", onWindowResize);
 
 onMounted(() => {
   runCheck();
+  startReminders();
 });
 
 onBeforeUnmount(() => {
