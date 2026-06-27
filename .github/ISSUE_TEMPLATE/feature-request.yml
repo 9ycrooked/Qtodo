@@ -1,0 +1,44 @@
+name: 功能建议
+description: 提出新功能或改进建议
+title: "[Feature]: "
+labels: ["feature", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的建议！请描述你希望看到的功能或改进。
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: 问题背景
+      description: 你遇到了什么问题，或者有什么使用场景？
+      placeholder: 例如：我经常需要批量设置多个任务的到期时间，但目前只能逐个操作
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: 期望方案
+      description: 你希望这个功能怎样工作？
+      placeholder: 例如：希望能选中多个任务后批量修改到期日期
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: 替代方案
+      description: 你考虑过其他解决方式吗？（可选）
+      placeholder: 例如：目前我是通过逐个编辑来实现的
+    validations:
+      required: false
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 附加信息
+      description: 截图、设计草图、参考链接等（可选）
+    validations:
+      required: false
