@@ -7,8 +7,6 @@ import { useUpdater } from "../composables/useUpdater";
 import { useTheme } from "../composables/useTheme";
 import type { ThemeMode } from "../composables/useTheme";
 import {
-  reminderOptions,
-  getReminderLabel,
   loadGlobalReminderMinutes,
 } from "../composables/useReminderSetting";
 import QmButton from "../components/ui/QmButton.vue";
@@ -45,19 +43,25 @@ const error = ref("");
 const appVersion = ref("");
 
 const reminderMinutes = ref("5");
-const reminderLabel = computed(() => getReminderLabel(reminderMinutes.value));
+const reminderHint = computed(() => {
+  const v = Number(reminderMinutes.value);
+  if (isNaN(v)) return "分钟";
+  if (v < 0) return "关闭";
+  if (v === 0) return "准时";
+  return "分钟";
+});
 
 async function loadReminderSetting() {
   reminderMinutes.value = await loadGlobalReminderMinutes();
 }
 
-async function saveReminderSetting(value: string) {
-  reminderMinutes.value = value;
-  try {
-    await invoke("set_setting", { key: "default_reminder_minutes", value });
-  } catch (e) {
-    console.error("[qtodo] save reminder setting failed:", e);
-  }
+function onReminderInput() {
+  let v = parseInt(reminderMinutes.value, 10);
+  if (isNaN(v)) v = 5;
+  reminderMinutes.value = String(v);
+  invoke("set_setting", { key: "default_reminder_minutes", value: String(v) }).catch(
+    (e) => console.error("[qtodo] save reminder setting failed:", e),
+  );
 }
 
 const displayPath = computed(() => {
@@ -169,21 +173,17 @@ onMounted(async () => {
             <h6>任务提醒</h6>
             <span class="card-desc">任务到期前多久提醒</span>
           </div>
-          <div class="reminder-dropdown">
-            <QmButton variant="tonal" size="small" data-ui="#reminder-menu" @keydown="onTriggerKeydown">
-              {{ reminderLabel }}
-              <i>arrow_drop_down</i>
-            </QmButton>
-            <menu id="reminder-menu" class="no-wrap">
-              <li
-                v-for="opt in reminderOptions"
-                :key="opt.value"
-                @click="saveReminderSetting(opt.value)"
-              >
-                <div class="max">{{ opt.label }}</div>
-                <i v-if="reminderMinutes === opt.value" class="check-icon">check</i>
-              </li>
-            </menu>
+          <div class="reminder-input-wrap">
+            <input
+              v-model="reminderMinutes"
+              type="number"
+              class="reminder-input"
+              min="-1"
+              step="1"
+              @blur="onReminderInput"
+              @keydown.enter="onReminderInput"
+            >
+            <span class="reminder-hint">{{ reminderHint }}</span>
           </div>
         </nav>
       </article>
@@ -360,18 +360,45 @@ onMounted(async () => {
   cursor: pointer;
 }
 
-.reminder-dropdown {
-  position: relative;
+.reminder-input-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-left: auto;
 }
 
-.reminder-dropdown menu {
-  right: 0;
-  left: auto;
+.reminder-input {
+  width: 56px;
+  padding: 6px 10px;
+  border: 1px solid var(--outline-variant);
+  border-radius: 18px;
+  font-size: 14px;
+  color: var(--on-surface);
+  background-color: transparent;
+  text-align: center;
+  outline: none;
+  transition: border-color 200ms;
+  -moz-appearance: textfield;
 }
 
-.reminder-dropdown menu li {
-  cursor: pointer;
+.reminder-input::-webkit-inner-spin-button,
+.reminder-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.reminder-input:hover {
+  border-color: var(--on-surface-variant);
+}
+
+.reminder-input:focus {
+  border-color: var(--primary);
+}
+
+.reminder-hint {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  min-width: 24px;
 }
 
 </style>
