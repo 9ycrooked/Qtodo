@@ -2,7 +2,7 @@
 import { useTheme } from "./composables/useTheme";
 import { useNotifications } from "./composables/useNotifications";
 import { useUpdater } from "./composables/useUpdater";
-import { notify } from "./composables/useNotify";
+import { notify, initNotificationPermission } from "./composables/useNotify";
 import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
 import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
 import TodayDetailPanel from "./components/todo/TodayDetailPanel.vue";
@@ -305,7 +305,8 @@ const onWindowResize = () => {
 
 window.addEventListener("resize", onWindowResize);
 
-onMounted(() => {
+onMounted(async () => {
+  await initNotificationPermission();
   runCheck();
   startReminders();
 });
