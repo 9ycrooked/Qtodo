@@ -354,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn init_stamps_schema_version_one() {
+    fn init_stamps_schema_version_two() {
         let dir = tempdir().expect("tempdir");
         let db = init(dir.path()).expect("init should succeed");
         let conn = db.conn.lock().expect("lock");
@@ -365,7 +365,7 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("schema_version row should exist");
-        assert_eq!(version, "1");
+        assert_eq!(version, "2");
     }
 
     #[test]
@@ -470,7 +470,7 @@ mod tests {
                 |r| r.get(0),
             )
             .expect("schema_version should survive reset");
-        assert_eq!(version, "1");
+        assert_eq!(version, "2");
     }
 
     #[test]
