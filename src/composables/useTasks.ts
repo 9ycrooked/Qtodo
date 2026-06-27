@@ -152,6 +152,7 @@ export const useTasks = () => {
           createdAt: nowIso,
           updatedAt: nowIso,
           viewOrders: {},
+          reminderMinutes: payload.reminderMinutes,
         };
 
         tasks.value = [task, ...tasks.value];
@@ -220,6 +221,7 @@ export const useTasks = () => {
             dueDate: payload.dueDate,
             dueTime: payload.dueTime,
             priority: payload.priority,
+            reminderMinutes: payload.reminderMinutes,
             updatedAt: nowIso,
             viewOrders: task.viewOrders,
           };

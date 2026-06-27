@@ -24,6 +24,7 @@ export interface TodoTaskInput {
   priority: TodoPriority;
   dueDate: string;
   dueTime?: string;
+  reminderMinutes?: number;
 }
 
 export interface TodoTaskEditInput extends TodoTaskInput {
