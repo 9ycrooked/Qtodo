@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-import { invoke } from "@tauri-apps/api/core";
+import { getReminderLabel, loadGlobalReminderMinutes } from "../../composables/useReminderSetting";
 import QmDialog from "../ui/QmDialog.vue";
 import type { TodoPriority, TodoTask, TodoTaskInput } from "../../types/todo";
 
@@ -33,24 +33,12 @@ const form = reactive({
 const dueDateInput = ref<HTMLInputElement | null>(null);
 const dueTimeInput = ref<HTMLInputElement | null>(null);
 
-const globalReminderMinutes = ref<string>("5");
+const globalReminderLabel = ref("5 分钟");
 
 async function loadGlobalReminder() {
-  try {
-    const val = await invoke<string | null>("get_setting", { key: "default_reminder_minutes" });
-    globalReminderMinutes.value = val ?? "5";
-  } catch {
-    globalReminderMinutes.value = "5";
-  }
+  const val = await loadGlobalReminderMinutes();
+  globalReminderLabel.value = getReminderLabel(val);
 }
-
-const globalReminderLabel = computed(() => {
-  const labelMap: Record<string, string> = {
-    "5": "5 分钟", "10": "10 分钟", "15": "15 分钟",
-    "30": "30 分钟", "60": "1 小时", "0": "准时", "-1": "关闭",
-  };
-  return labelMap[globalReminderMinutes.value] ?? "5 分钟";
-});
 
 function onReminderChange(e: Event) {
   const val = (e.target as HTMLSelectElement).value;

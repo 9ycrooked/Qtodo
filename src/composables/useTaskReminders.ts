@@ -1,28 +1,17 @@
-import { invoke } from "@tauri-apps/api/core";
 import { watch, onUnmounted, type Ref } from "vue";
 import { notify } from "./useNotify";
 import { currentDate } from "../utils/currentDate";
+import { loadGlobalReminderMinutes } from "./useReminderSetting";
 import type { TodoTask } from "../types/todo";
-
-const DEFAULT_ADVANCE_MINUTES = 5;
 
 export function useTaskReminders(tasks: Ref<TodoTask[]>) {
   const notifiedToday = new Set<string>();
   let lastDate = currentDate();
-  let globalAdvanceMinutes = DEFAULT_ADVANCE_MINUTES;
+  let globalAdvanceMinutes = 5;
   let intervalId: ReturnType<typeof setInterval> | null = null;
 
   async function loadGlobalAdvance() {
-    try {
-      const val = await invoke<string | null>("get_setting", {
-        key: "default_reminder_minutes",
-      });
-      if (val != null) {
-        globalAdvanceMinutes = Number(val);
-      }
-    } catch {
-      globalAdvanceMinutes = DEFAULT_ADVANCE_MINUTES;
-    }
+    globalAdvanceMinutes = Number(await loadGlobalReminderMinutes());
   }
 
   function checkReminders() {
@@ -52,17 +41,13 @@ export function useTaskReminders(tasks: Ref<TodoTask[]>) {
 
       if (now >= reminderMs && now < dueMs) {
         const time = `${task.dueDate} ${task.dueTime}`;
-        const title = task.title
-          ? `${task.title} · ${task.description}`
-          : task.description;
-        notify("warning", "任务到期 · Qtodo", `「${title}」${time}`);
+        const label = task.title ?? task.description;
+        notify("warning", "任务到期 · Qtodo", `「${label}」${time}`);
         notifiedToday.add(task.id);
       } else if (now >= dueMs) {
         const time = `${task.dueDate} ${task.dueTime}`;
-        const title = task.title
-          ? `${task.title} · ${task.description}`
-          : task.description;
-        notify("error", "任务到期 · Qtodo", `「${title}」已过期（${time}）`);
+        const label = task.title ?? task.description;
+        notify("error", "任务到期 · Qtodo", `「${label}」已过期（${time}）`);
         notifiedToday.add(task.id);
       }
     }
@@ -73,22 +58,17 @@ export function useTaskReminders(tasks: Ref<TodoTask[]>) {
         (t) => !t.dueTime && t.dueDate === today,
       );
       if (dueDateOnly.length > 0) {
-        const advance =
-          globalAdvanceMinutes >= 0 ? globalAdvanceMinutes : DEFAULT_ADVANCE_MINUTES;
-        // Only fire for date-only tasks if the global setting allows reminders
-        if (advance >= 0) {
-          const names = dueDateOnly
-            .slice(0, 3)
-            .map((t) => t.title ?? t.description);
-          const extra =
-            dueDateOnly.length > 3 ? `等 ${dueDateOnly.length} 个` : "";
-          notify(
-            "info",
-            "今日任务 · Qtodo",
-            `今日有 ${dueDateOnly.length} 个任务到期：${names.join("、")}${extra}`,
-          );
-          notifiedToday.add("__date_only__");
-        }
+        const names = dueDateOnly
+          .slice(0, 3)
+          .map((t) => t.title ?? t.description);
+        const extra =
+          dueDateOnly.length > 3 ? `等 ${dueDateOnly.length} 个` : "";
+        notify(
+          "info",
+          "今日任务 · Qtodo",
+          `今日有 ${dueDateOnly.length} 个任务到期：${names.join("、")}${extra}`,
+        );
+        notifiedToday.add("__date_only__");
       }
     }
   }

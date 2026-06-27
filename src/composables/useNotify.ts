@@ -1,6 +1,8 @@
 import { sendNotification } from "@tauri-apps/plugin-notification";
 import { useNotifications, type ToastType } from "./useNotifications";
 
+const { add } = useNotifications();
+
 /**
  * 焦点感知双通道通知。
  * - app 有焦点 → in-app toast（useNotifications.add）
@@ -12,7 +14,6 @@ import { useNotifications, type ToastType } from "./useNotifications";
  */
 export function notify(type: ToastType, title: string, body: string): void {
   if (document.hasFocus()) {
-    const { add } = useNotifications();
     add(type, body);
   } else {
     sendNotification({ title, body });

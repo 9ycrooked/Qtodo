@@ -188,6 +188,63 @@ describe("useTaskReminders", () => {
     );
   });
 
+  it("notifies date-only tasks even when global setting is -1 (关闭)", async () => {
+    mockedInvoke.mockResolvedValue("-1");
+    const tasks = ref([
+      makeTask({ id: "t1", dueDate: "2026-06-27" }),
+    ]);
+    const { start, checkReminders } = useTaskReminders(tasks);
+
+    start();
+    await vi.advanceTimersByTimeAsync(0);
+    checkReminders();
+
+    expect(mockedNotify).toHaveBeenCalledTimes(1);
+    expect(mockedNotify).toHaveBeenCalledWith(
+      "info",
+      "今日任务 · Qtodo",
+      expect.stringContaining("1 个任务到期"),
+    );
+  });
+
+  it("uses only title in notification body, not description", () => {
+    const tasks = ref([
+      makeTask({
+        id: "t1",
+        title: "开会",
+        description: "讨论Q3计划",
+        dueTime: "10:10",
+        reminderMinutes: 15,
+      }),
+    ]);
+    const { checkReminders } = useTaskReminders(tasks);
+
+    checkReminders();
+
+    expect(mockedNotify).toHaveBeenCalledTimes(1);
+    const body = mockedNotify.mock.calls[0][2];
+    expect(body).toContain("「开会」");
+    expect(body).not.toContain("讨论Q3计划");
+  });
+
+  it("falls back to description when title is absent", () => {
+    const tasks = ref([
+      makeTask({
+        id: "t1",
+        description: "买牛奶",
+        dueTime: "10:10",
+        reminderMinutes: 15,
+      }),
+    ]);
+    const { checkReminders } = useTaskReminders(tasks);
+
+    checkReminders();
+
+    expect(mockedNotify).toHaveBeenCalledTimes(1);
+    const body = mockedNotify.mock.calls[0][2];
+    expect(body).toContain("「买牛奶」");
+  });
+
   it("uses global default when reminderMinutes is undefined", async () => {
     mockedInvoke.mockResolvedValue("10");
     const tasks = ref([

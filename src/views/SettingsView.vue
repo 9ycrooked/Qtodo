@@ -6,6 +6,11 @@ import { computed, onMounted, ref } from "vue";
 import { useUpdater } from "../composables/useUpdater";
 import { useTheme } from "../composables/useTheme";
 import type { ThemeMode } from "../composables/useTheme";
+import {
+  reminderOptions,
+  getReminderLabel,
+  loadGlobalReminderMinutes,
+} from "../composables/useReminderSetting";
 import QmButton from "../components/ui/QmButton.vue";
 import QmIconButton from "../components/ui/QmIconButton.vue";
 
@@ -39,27 +44,11 @@ const copying = ref(false);
 const error = ref("");
 const appVersion = ref("");
 
-const reminderOptions = [
-  { value: "5", label: "5 分钟" },
-  { value: "10", label: "10 分钟" },
-  { value: "15", label: "15 分钟" },
-  { value: "30", label: "30 分钟" },
-  { value: "60", label: "1 小时" },
-  { value: "0", label: "准时" },
-  { value: "-1", label: "关闭" },
-];
 const reminderMinutes = ref("5");
-const reminderLabel = computed(
-  () => reminderOptions.find((o) => o.value === reminderMinutes.value)?.label ?? "5 分钟",
-);
+const reminderLabel = computed(() => getReminderLabel(reminderMinutes.value));
 
 async function loadReminderSetting() {
-  try {
-    const val = await invoke<string | null>("get_setting", { key: "default_reminder_minutes" });
-    reminderMinutes.value = val ?? "5";
-  } catch {
-    reminderMinutes.value = "5";
-  }
+  reminderMinutes.value = await loadGlobalReminderMinutes();
 }
 
 async function saveReminderSetting(value: string) {
