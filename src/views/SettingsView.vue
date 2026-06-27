@@ -171,7 +171,7 @@ onMounted(async () => {
           <i>notifications</i>
           <div class="card-desc-wrap">
             <h6>任务提醒</h6>
-            <span class="card-desc">任务到期前多久提醒</span>
+            <span class="card-desc">任务到期前多久提醒（-1 关闭，0 准时）</span>
           </div>
           <div class="reminder-input-wrap">
             <input
