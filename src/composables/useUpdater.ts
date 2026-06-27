@@ -18,6 +18,7 @@ const downloadedBytes = ref(0);
 const totalBytes = ref(0);
 const downloadState = ref<DownloadState>("idle");
 const checkMessage = ref<string | null>(null);
+const checkSource = ref<"auto" | "manual">("auto");
 const isChecking = ref(false);
 
 const progressPercent = computed(() => {
@@ -34,6 +35,7 @@ export const useUpdater = () => {
    */
   const runCheck = async (options: { manual?: boolean } = {}): Promise<void> => {
     const manual = Boolean(options.manual);
+    checkSource.value = manual ? "manual" : "auto";
 
     // 24h cache: 仅自动检查时生效
     if (!manual) {
@@ -123,6 +125,7 @@ export const useUpdater = () => {
     progressPercent,
     downloadState,
     checkMessage,
+    checkSource,
     isChecking,
     runCheck,
     downloadUpdate,

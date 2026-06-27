@@ -32,6 +32,7 @@ const RAW_RUNTIME_STATE =
           ["@tauri-apps/cli", "npm:2.11.2"],\
           ["@tauri-apps/plugin-dialog", "npm:2.7.1"],\
           ["@tauri-apps/plugin-log", "npm:2.8.0"],\
+          ["@tauri-apps/plugin-notification", "npm:2.3.3"],\
           ["@tauri-apps/plugin-opener", "npm:2.5.4"],\
           ["@tauri-apps/plugin-process", "npm:2.3.1"],\
           ["@tauri-apps/plugin-updater", "npm:2.10.1"],\
@@ -973,6 +974,16 @@ const RAW_RUNTIME_STATE =
         "packageDependencies": [\
           ["@tauri-apps/api", "npm:2.11.1"],\
           ["@tauri-apps/plugin-log", "npm:2.8.0"]\
+        ],\
+        "linkType": "HARD"\
+      }]\
+    ]],\
+    ["@tauri-apps/plugin-notification", [\
+      ["npm:2.3.3", {\
+        "packageLocation": "../../../AppData/Local/Yarn/Berry/cache/@tauri-apps-plugin-notification-npm-2.3.3-a33ea4243c-10c0.zip/node_modules/@tauri-apps/plugin-notification/",\
+        "packageDependencies": [\
+          ["@tauri-apps/api", "npm:2.11.1"],\
+          ["@tauri-apps/plugin-notification", "npm:2.3.3"]\
         ],\
         "linkType": "HARD"\
       }]\
@@ -2286,6 +2297,7 @@ const RAW_RUNTIME_STATE =
           ["@tauri-apps/cli", "npm:2.11.2"],\
           ["@tauri-apps/plugin-dialog", "npm:2.7.1"],\
           ["@tauri-apps/plugin-log", "npm:2.8.0"],\
+          ["@tauri-apps/plugin-notification", "npm:2.3.3"],\
           ["@tauri-apps/plugin-opener", "npm:2.5.4"],\
           ["@tauri-apps/plugin-process", "npm:2.3.1"],\
           ["@tauri-apps/plugin-updater", "npm:2.10.1"],\

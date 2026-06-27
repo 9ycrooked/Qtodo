@@ -39,6 +39,38 @@ const copying = ref(false);
 const error = ref("");
 const appVersion = ref("");
 
+const reminderOptions = [
+  { value: "5", label: "5 分钟" },
+  { value: "10", label: "10 分钟" },
+  { value: "15", label: "15 分钟" },
+  { value: "30", label: "30 分钟" },
+  { value: "60", label: "1 小时" },
+  { value: "0", label: "准时" },
+  { value: "-1", label: "关闭" },
+];
+const reminderMinutes = ref("5");
+const reminderLabel = computed(
+  () => reminderOptions.find((o) => o.value === reminderMinutes.value)?.label ?? "5 分钟",
+);
+
+async function loadReminderSetting() {
+  try {
+    const val = await invoke<string | null>("get_setting", { key: "default_reminder_minutes" });
+    reminderMinutes.value = val ?? "5";
+  } catch {
+    reminderMinutes.value = "5";
+  }
+}
+
+async function saveReminderSetting(value: string) {
+  reminderMinutes.value = value;
+  try {
+    await invoke("set_setting", { key: "default_reminder_minutes", value });
+  } catch (e) {
+    console.error("[qtodo] save reminder setting failed:", e);
+  }
+}
+
 const displayPath = computed(() => {
   const path = dbPath.value;
   if (path.length <= 50) return path;
@@ -73,6 +105,7 @@ async function changePath() {
 
 onMounted(async () => {
   await loadPath();
+  await loadReminderSetting();
   appVersion.value = await getVersion();
 });
 </script>
@@ -137,6 +170,32 @@ onMounted(async () => {
           >
             {{ isChecking ? '正在检查…' : '检查更新' }}
           </QmButton>
+        </nav>
+      </article>
+
+      <article class="card settings-card">
+        <nav>
+          <i>notifications</i>
+          <div class="card-desc-wrap">
+            <h6>任务提醒</h6>
+            <span class="card-desc">任务到期前多久提醒</span>
+          </div>
+          <div class="reminder-dropdown">
+            <QmButton variant="tonal" size="small" data-ui="#reminder-menu" @keydown="onTriggerKeydown">
+              {{ reminderLabel }}
+              <i>arrow_drop_down</i>
+            </QmButton>
+            <menu id="reminder-menu" class="no-wrap">
+              <li
+                v-for="opt in reminderOptions"
+                :key="opt.value"
+                @click="saveReminderSetting(opt.value)"
+              >
+                <div class="max">{{ opt.label }}</div>
+                <i v-if="reminderMinutes === opt.value" class="check-icon">check</i>
+              </li>
+            </menu>
+          </div>
         </nav>
       </article>
     </div>
@@ -309,6 +368,20 @@ onMounted(async () => {
 }
 
 .theme-dropdown menu li {
+  cursor: pointer;
+}
+
+.reminder-dropdown {
+  position: relative;
+  margin-left: auto;
+}
+
+.reminder-dropdown menu {
+  right: 0;
+  left: auto;
+}
+
+.reminder-dropdown menu li {
   cursor: pointer;
 }
 
