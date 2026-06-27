@@ -15,6 +15,7 @@ export interface TodoTask {
   completedAt?: string;
   archivedAt?: string;
   viewOrders?: Partial<Record<TodoViewKey, number>>;
+  reminderMinutes?: number;
 }
 
 export interface TodoTaskInput {
