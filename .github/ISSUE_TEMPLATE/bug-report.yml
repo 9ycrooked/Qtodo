@@ -1,0 +1,78 @@
+name: Bug 报告
+description: 报告一个 Bug，帮助我们改进 Qtodo
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        感谢你的反馈！请尽可能详细地描述问题，以便我们快速定位和修复。
+
+  - type: textarea
+    id: description
+    attributes:
+      label: 问题描述
+      description: 简要描述遇到了什么问题
+      placeholder: 例如：点击保存按钮后应用崩溃
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: 复现步骤
+      description: 如何复现这个问题？
+      placeholder: |
+        1. 打开应用
+        2. 点击"新建任务"
+        3. 输入内容...
+        4. 观察到...
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: 期望行为
+      description: 你期望发生什么？
+      placeholder: 例如：任务应该正常保存并显示在列表中
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: 实际行为
+      description: 实际发生了什么？
+      placeholder: 例如：应用闪退，没有任何错误提示
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: 应用版本
+      description: 你使用的 Qtodo 版本（可在设置页查看）
+      placeholder: 例如：v0.1.9
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: 操作系统
+      options:
+        - Windows 11
+        - Windows 10
+        - macOS
+        - Linux
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: 附加信息
+      description: 截图、日志、错误信息等额外信息（可选）
+    validations:
+      required: false
