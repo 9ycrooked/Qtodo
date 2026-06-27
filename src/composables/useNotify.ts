@@ -12,12 +12,17 @@ let permissionGranted = false;
 
 /** 启动时检查/请求通知权限，应在 App 初始化时调用一次 */
 export async function initNotificationPermission(): Promise<void> {
-  let granted = await isPermissionGranted();
-  if (!granted) {
-    const result = await requestPermission();
-    granted = result === "granted";
+  try {
+    let granted = await isPermissionGranted();
+    if (!granted) {
+      const result = await requestPermission();
+      granted = result === "granted";
+    }
+    permissionGranted = granted;
+  } catch (e) {
+    console.warn("[notify] 通知权限初始化失败，系统通知将被禁用:", e);
+    permissionGranted = false;
   }
-  permissionGranted = granted;
 }
 
 /**
