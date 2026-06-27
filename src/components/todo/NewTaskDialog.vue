@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
+import { getReminderLabel, loadGlobalReminderMinutes } from "../../composables/useReminderSetting";
 import QmDialog from "../ui/QmDialog.vue";
 import type { TodoPriority, TodoTask, TodoTaskInput } from "../../types/todo";
 
@@ -27,9 +28,22 @@ const form = reactive({
   dueDate: "",
   dueTime: "",
   priority: "medium" as TodoPriority,
+  reminderMinutes: undefined as number | undefined,
 });
 const dueDateInput = ref<HTMLInputElement | null>(null);
 const dueTimeInput = ref<HTMLInputElement | null>(null);
+
+const globalReminderLabel = ref("5 分钟");
+
+async function loadGlobalReminder() {
+  const val = await loadGlobalReminderMinutes();
+  globalReminderLabel.value = getReminderLabel(val);
+}
+
+function onReminderChange(e: Event) {
+  const val = (e.target as HTMLSelectElement).value;
+  form.reminderMinutes = val === "" ? undefined : Number(val);
+}
 
 const isEditMode = computed(() => props.mode === "edit");
 const dialogTitle = computed(() => (isEditMode.value ? "编辑任务" : "新建任务"));
@@ -52,6 +66,7 @@ const resetForm = () => {
   form.dueDate = "";
   form.dueTime = "";
   form.priority = "medium";
+  form.reminderMinutes = undefined;
 };
 
 const fillForm = (task: TodoTask) => {
@@ -60,6 +75,7 @@ const fillForm = (task: TodoTask) => {
   form.dueDate = task.dueDate;
   form.dueTime = task.dueTime ?? "";
   form.priority = task.priority;
+  form.reminderMinutes = task.reminderMinutes;
 };
 
 const closeDialog = () => {
@@ -92,6 +108,7 @@ const submitTask = () => {
     dueDate: form.dueDate,
     dueTime: form.dueTime || undefined,
     priority: form.priority,
+    reminderMinutes: form.reminderMinutes,
   };
 
   if (isEditMode.value) {
@@ -111,6 +128,8 @@ watch(
       resetForm();
       return;
     }
+
+    loadGlobalReminder();
 
     if (isEditMode.value && props.task) {
       fillForm(props.task);
@@ -162,6 +181,20 @@ watch(
           </button>
           <input ref="dueTimeInput" v-model="form.dueTime" type="time" aria-label="截止时间">
         </div>
+      </div>
+
+      <div class="reminder-field">
+        <label class="reminder-label">提前提醒</label>
+        <select :value="form.reminderMinutes ?? ''" class="reminder-select" @change="onReminderChange">
+          <option value="">使用默认（{{ globalReminderLabel }}）</option>
+          <option value="5">5 分钟</option>
+          <option value="10">10 分钟</option>
+          <option value="15">15 分钟</option>
+          <option value="30">30 分钟</option>
+          <option value="60">1 小时</option>
+          <option value="0">准时</option>
+          <option value="-1">关闭</option>
+        </select>
       </div>
 
       <fieldset class="priority-field">
@@ -280,5 +313,41 @@ watch(
 
 .dialog-actions button:disabled {
   opacity: 0.42;
+}
+
+.reminder-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.reminder-label {
+  font-size: 12px;
+  color: var(--on-surface-variant);
+  padding-left: 4px;
+}
+
+.reminder-select {
+  appearance: none;
+  border: 1px solid var(--outline-variant);
+  border-radius: 18px;
+  padding: 10px 36px 10px 14px;
+  font-size: 14px;
+  color: var(--on-surface);
+  background-color: transparent;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'%3E%3Cpath fill='%23888' d='M7 10l5 5 5-5z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 200ms;
+}
+
+.reminder-select:hover {
+  border-color: var(--on-surface-variant);
+}
+
+.reminder-select:focus {
+  border-color: var(--primary);
 }
 </style>

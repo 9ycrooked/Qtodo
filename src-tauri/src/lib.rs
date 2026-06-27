@@ -63,6 +63,18 @@ fn save_view_orders(
     db.save_view_orders(id, view_orders, updated_at)
 }
 
+/// Read an arbitrary setting from the `app_meta` table.
+#[tauri::command]
+fn get_setting(key: String, db: tauri::State<'_, Arc<Db>>) -> Result<Option<String>, String> {
+    db.get_setting(&key)
+}
+
+/// Write an arbitrary setting into the `app_meta` table (UPSERT).
+#[tauri::command]
+fn set_setting(key: String, value: String, db: tauri::State<'_, Arc<Db>>) -> Result<(), String> {
+    db.set_setting(&key, &value)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -70,6 +82,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_log::Builder::new()
                 .targets([
@@ -114,6 +127,8 @@ pub fn run() {
             save_task,
             delete_task,
             save_view_orders,
+            get_setting,
+            set_setting,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

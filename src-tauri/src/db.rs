@@ -20,6 +20,8 @@ pub struct TodoTask {
     pub completed_at: Option<String>,
     pub archived_at: Option<String>,
     pub view_orders: Option<serde_json::Value>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reminder_minutes: Option<i32>,
 }
 
 /// In-memory handle to the application's SQLite database. Both `conn` and
@@ -30,7 +32,24 @@ pub struct Db {
     pub path: Mutex<PathBuf>,
 }
 
-const SCHEMA_VERSION: &str = "1";
+const SCHEMA_VERSION: &str = "2";
+
+/// Run incremental schema migrations. Each migration is guarded by a column
+/// existence check so it is safe to call on every startup.
+fn migrate(conn: &Connection) -> SqlResult<()> {
+    // Migration 1→2: add reminder_minutes column to tasks
+    let has_col: bool = conn.query_row(
+        "SELECT COUNT(*) FROM pragma_table_info('tasks') WHERE name = 'reminder_minutes'",
+        [],
+        |row| row.get::<_, i64>(0),
+    )? != 0;
+
+    if !has_col {
+        conn.execute("ALTER TABLE tasks ADD COLUMN reminder_minutes INTEGER", [])?;
+    }
+
+    Ok(())
+}
 
 /// Initialize a SQLite database at `app_data_dir/qtodo.db`, create the
 /// `tasks` and `app_meta` tables if missing, and stamp the initial
@@ -41,6 +60,7 @@ pub fn init(app_data_dir: &Path) -> SqlResult<Db> {
     let db_path = app_data_dir.join("qtodo.db");
     let conn = Connection::open(&db_path)?;
     create_schema(&conn)?;
+    migrate(&conn)?;
     stamp_schema_version(&conn)?;
     Ok(Db {
         conn: Mutex::new(conn),
@@ -129,8 +149,8 @@ impl Db {
             "INSERT INTO tasks (
                 id, title, description, completed, archived, priority,
                 due_date, due_time, created_at, updated_at,
-                completed_at, archived_at, view_orders
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
+                completed_at, archived_at, view_orders, reminder_minutes
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)
              ON CONFLICT(id) DO UPDATE SET
                 title = excluded.title,
                 description = excluded.description,
@@ -142,7 +162,8 @@ impl Db {
                 updated_at = excluded.updated_at,
                 completed_at = excluded.completed_at,
                 archived_at = excluded.archived_at,
-                view_orders = excluded.view_orders",
+                view_orders = excluded.view_orders,
+                reminder_minutes = excluded.reminder_minutes",
             params![
                 task.id,
                 task.title,
@@ -157,6 +178,7 @@ impl Db {
                 task.completed_at,
                 task.archived_at,
                 view_orders_json,
+                task.reminder_minutes,
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -170,7 +192,7 @@ impl Db {
             .prepare(
                 "SELECT id, title, description, completed, archived, priority,
                         due_date, due_time, created_at, updated_at,
-                        completed_at, archived_at, view_orders
+                        completed_at, archived_at, view_orders, reminder_minutes
                  FROM tasks
                  ORDER BY datetime(created_at) DESC",
             )
@@ -193,6 +215,7 @@ impl Db {
                     view_orders: row
                         .get::<_, Option<String>>("view_orders")?
                         .and_then(|s| serde_json::from_str(&s).ok()),
+                    reminder_minutes: row.get("reminder_minutes")?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -225,6 +248,32 @@ impl Db {
         .map_err(|e| e.to_string())?;
         Ok(())
     }
+
+    /// Read an arbitrary setting from the `app_meta` table.
+    pub fn get_setting(&self, key: &str) -> Result<Option<String>, String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        let result = conn.query_row(
+            "SELECT value FROM app_meta WHERE key = ?1",
+            params![key],
+            |row| row.get::<_, String>(0),
+        );
+        match result {
+            Ok(val) => Ok(Some(val)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(e.to_string()),
+        }
+    }
+
+    /// Write an arbitrary setting into the `app_meta` table (UPSERT).
+    pub fn set_setting(&self, key: &str, value: &str) -> Result<(), String> {
+        let conn = self.conn.lock().map_err(|e| e.to_string())?;
+        conn.execute(
+            "INSERT OR REPLACE INTO app_meta (key, value) VALUES (?1, ?2)",
+            params![key, value],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(())
+    }
 }
 
 fn create_schema(conn: &Connection) -> SqlResult<()> {
@@ -242,7 +291,8 @@ fn create_schema(conn: &Connection) -> SqlResult<()> {
             updated_at TEXT NOT NULL,
             completed_at TEXT,
             archived_at TEXT,
-            view_orders TEXT
+            view_orders TEXT,
+            reminder_minutes INTEGER
         )",
         [],
     )?;
@@ -304,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn init_stamps_schema_version_one() {
+    fn init_stamps_schema_version_two() {
         let dir = tempdir().expect("tempdir");
         let db = init(dir.path()).expect("init should succeed");
         let conn = db.conn.lock().expect("lock");
@@ -315,7 +365,7 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("schema_version row should exist");
-        assert_eq!(version, "1");
+        assert_eq!(version, "2");
     }
 
     #[test]
@@ -420,7 +470,7 @@ mod tests {
                 |r| r.get(0),
             )
             .expect("schema_version should survive reset");
-        assert_eq!(version, "1");
+        assert_eq!(version, "2");
     }
 
     #[test]
@@ -457,6 +507,7 @@ mod tests {
             completed_at: None,
             archived_at: None,
             view_orders: None,
+            reminder_minutes: None,
         }
     }
 
@@ -479,6 +530,7 @@ mod tests {
             completed_at: None,
             archived_at: None,
             view_orders: None,
+            reminder_minutes: None,
         };
         db.save_task(original.clone()).expect("save");
 
@@ -601,5 +653,131 @@ mod tests {
 
         let loaded = db.load_all_tasks().expect("load");
         assert_eq!(loaded[0].view_orders, Some(original));
+    }
+
+    // ── schema migration tests ─────────────────────────────────────────
+
+    #[test]
+    fn init_migrates_v1_to_v2_with_reminder_minutes_column() {
+        let dir = tempdir().expect("tempdir");
+        let db_path = dir.path().join("qtodo.db");
+
+        // Create a v1 database manually (without reminder_minutes)
+        {
+            let conn = Connection::open(&db_path).expect("open");
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS tasks (
+                    id TEXT PRIMARY KEY, title TEXT, description TEXT NOT NULL,
+                    completed INTEGER NOT NULL DEFAULT 0, archived INTEGER NOT NULL DEFAULT 0,
+                    priority TEXT NOT NULL, due_date TEXT NOT NULL, due_time TEXT,
+                    created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+                    completed_at TEXT, archived_at TEXT, view_orders TEXT
+                )",
+                [],
+            )
+            .expect("create tasks");
+            conn.execute(
+                "CREATE TABLE IF NOT EXISTS app_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+                [],
+            )
+            .expect("create app_meta");
+            conn.execute(
+                "INSERT OR REPLACE INTO app_meta (key, value) VALUES ('schema_version', '1')",
+                [],
+            )
+            .expect("stamp v1");
+        }
+
+        // Now run init() — should migrate to v2
+        let db = init(dir.path()).expect("init should migrate");
+
+        let conn = db.conn.lock().expect("lock");
+        let version: String = conn
+            .query_row(
+                "SELECT value FROM app_meta WHERE key = 'schema_version'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("schema_version");
+        assert_eq!(version, "2");
+
+        // Verify reminder_minutes column exists by inserting a row
+        conn.execute(
+            "INSERT INTO tasks (id, description, priority, due_date, created_at, updated_at, reminder_minutes)
+             VALUES ('t1', 'test', 'low', '2026-06-27', '2026-06-27T00:00:00Z', '2026-06-27T00:00:00Z', 10)",
+            [],
+        )
+        .expect("insert with reminder_minutes");
+    }
+
+    #[test]
+    fn init_v2_does_not_re_execute_alter() {
+        let dir = tempdir().expect("tempdir");
+        // First init creates v2 directly
+        let _db = init(dir.path()).expect("first init");
+        // Second init should not error (ALTER would fail if column already exists)
+        let _db2 = init(dir.path()).expect("second init should be idempotent");
+    }
+
+    #[test]
+    fn save_task_with_reminder_minutes_some() {
+        let dir = tempdir().expect("tempdir");
+        let db = init(dir.path()).expect("init");
+
+        let task = TodoTask {
+            reminder_minutes: Some(5),
+            ..make_task("t1", "test")
+        };
+        db.save_task(task).expect("save");
+
+        let loaded = db.load_all_tasks().expect("load");
+        assert_eq!(loaded[0].reminder_minutes, Some(5));
+    }
+
+    #[test]
+    fn save_task_with_reminder_minutes_none() {
+        let dir = tempdir().expect("tempdir");
+        let db = init(dir.path()).expect("init");
+
+        let task = TodoTask {
+            reminder_minutes: None,
+            ..make_task("t1", "test")
+        };
+        db.save_task(task).expect("save");
+
+        let loaded = db.load_all_tasks().expect("load");
+        assert_eq!(loaded[0].reminder_minutes, None);
+    }
+
+    // ── get_setting / set_setting tests ─────────────────────────────────
+
+    #[test]
+    fn set_then_get_setting_roundtrip() {
+        let dir = tempdir().expect("tempdir");
+        let db = init(dir.path()).expect("init");
+
+        db.set_setting("test_key", "42").expect("set");
+        let result = db.get_setting("test_key").expect("get");
+        assert_eq!(result, Some("42".to_string()));
+    }
+
+    #[test]
+    fn get_setting_nonexistent_returns_none() {
+        let dir = tempdir().expect("tempdir");
+        let db = init(dir.path()).expect("init");
+
+        let result = db.get_setting("no_such_key").expect("get");
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn set_setting_upserts() {
+        let dir = tempdir().expect("tempdir");
+        let db = init(dir.path()).expect("init");
+
+        db.set_setting("k", "v1").expect("set 1");
+        db.set_setting("k", "v2").expect("set 2");
+        let result = db.get_setting("k").expect("get");
+        assert_eq!(result, Some("v2".to_string()));
     }
 }

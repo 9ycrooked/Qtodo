@@ -2,6 +2,7 @@
 import { useTheme } from "./composables/useTheme";
 import { useNotifications } from "./composables/useNotifications";
 import { useUpdater } from "./composables/useUpdater";
+import { notify } from "./composables/useNotify";
 import DeleteTaskDialog from "./components/todo/DeleteTaskDialog.vue";
 import NewTaskDialog from "./components/todo/NewTaskDialog.vue";
 import TodayDetailPanel from "./components/todo/TodayDetailPanel.vue";
@@ -11,6 +12,7 @@ import QmTitleBar from "./components/ui/QmTitleBar.vue";
 import QmToastViewport from "./components/ui/QmToastViewport.vue";
 import { navItems, type NavItemKey } from "./config/navItems";
 import { useTasks } from "./composables/useTasks";
+import { useTaskReminders } from "./composables/useTaskReminders";
 import type { TodoTask, TodoTaskInput } from "./types/todo";
 import { currentDate } from "./utils/currentDate";
 import { getTaskViewCounts, getTasksForView } from "./utils/taskViews";
@@ -51,6 +53,8 @@ const {
   clearSelectedTask,
   flushPendingWrites,
 } = useTasks();
+const { start: startReminders } = useTaskReminders(tasks);
+
 const {
   updateAvailable,
   pendingUpdate,
@@ -59,6 +63,7 @@ const {
   progressPercent,
   downloadState,
   checkMessage,
+  checkSource,
   runCheck,
   downloadUpdate,
   installUpdate,
@@ -68,11 +73,17 @@ const notifications = useNotifications();
 
 const isUpdateDialogOpen = ref(false);
 
-// 手动检查结果 → toast
+// 手动检查结果 → toast / 系统通知（双通道）
 watch(checkMessage, (msg) => {
   if (msg) {
-    const type = msg.includes("失败") ? "error" : msg.includes("新版本") ? "success" : "info";
-    notifications[type](msg);
+    if (msg.includes("失败")) {
+      notify("error", "Qtodo", "检查更新失败，将在下次启动重试");
+    } else if (msg.includes("新版本")) {
+      const version = pendingUpdate.value?.version ?? "";
+      notify("success", "更新可用 · Qtodo", `v${version} 已发布`);
+    } else {
+      notify("info", "Qtodo", msg);
+    }
     checkMessage.value = null;
   }
 });
@@ -81,6 +92,14 @@ watch(checkMessage, (msg) => {
 watch(downloadState, (state) => {
   if (state === "downloaded" && !isUpdateDialogOpen.value) {
     isUpdateDialogOpen.value = true;
+  }
+});
+
+// 自动检查发现新版本 → 通知（手动检查由 checkMessage watcher 处理）
+watch(updateAvailable, (available) => {
+  if (available && checkSource.value === "auto") {
+    const version = pendingUpdate.value?.version ?? "";
+    notify("success", "更新可用 · Qtodo", `v${version} 已发布`);
   }
 });
 
@@ -288,6 +307,7 @@ window.addEventListener("resize", onWindowResize);
 
 onMounted(() => {
   runCheck();
+  startReminders();
 });
 
 onBeforeUnmount(() => {
